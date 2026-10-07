@@ -13,6 +13,7 @@ class ContactsTab extends StatefulWidget {
 
 class _ContactsTabState extends State<ContactsTab> {
   String _status = 'unread';
+  String _search = '';
 
   @override
   Widget build(BuildContext context) {
@@ -20,39 +21,28 @@ class _ContactsTabState extends State<ContactsTab> {
 
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.all(8),
-          child: SegmentedButton<String>(
-            segments: [
-              ButtonSegment(value: 'unread', label: Text(s.t('unread'))),
-              ButtonSegment(value: 'all', label: Text(s.t('all'))),
-            ],
-            selected: {_status},
-            showSelectedIcon: false,
-            onSelectionChanged: (selection) => setState(() => _status = selection.first),
-          ),
+        FilterBar(
+          segments: {'unread': s.t('unread'), 'all': s.t('all')},
+          selected: _status,
+          onChanged: (value) => setState(() => _status = value),
         ),
+        SearchField(onChanged: (value) => setState(() => _search = value)),
         Expanded(
           child: PagedList(
             path: '/contacts',
-            query: {'status': _status},
+            query: {'status': _status, if (_search.isNotEmpty) 'search': _search},
+            emptyIcon: Icons.mail_outline,
             itemBuilder: (context, contact, refresh) {
               final unread = contact['is_read'] != true;
-              return ListTile(
-                leading: Icon(
-                  unread ? Icons.mark_email_unread : Icons.mail_outline,
-                  color: unread ? brandColor : Colors.grey,
-                ),
-                title: Text(
-                  contact['name']?.toString() ?? '',
-                  style: TextStyle(fontWeight: unread ? FontWeight.w800 : FontWeight.w500),
-                ),
-                subtitle: Text(
-                  '${contact['excerpt']}\n${contact['subject_display'] ?? ''} · ${shortDate(contact['created_at'])}',
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                isThreeLine: true,
+              return ItemCard(
+                icon: unread ? Icons.mark_email_unread_outlined : Icons.mail_outline,
+                title: contact['name']?.toString() ?? '',
+                subtitle: contact['excerpt']?.toString(),
+                trailing: relativeDate(context, contact['created_at']),
+                unread: unread,
+                chips: [
+                  if ((contact['subject_display'] ?? '').toString().isNotEmpty) Pill(contact['subject_display'].toString()),
+                ],
                 onTap: () async {
                   await Navigator.of(context).push(MaterialPageRoute(
                     builder: (_) => ContactDetailScreen(id: contact['id'] as int),

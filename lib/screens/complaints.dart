@@ -13,6 +13,7 @@ class ComplaintsTab extends StatefulWidget {
 
 class _ComplaintsTabState extends State<ComplaintsTab> {
   String _tab = 'attention';
+  String _search = '';
 
   @override
   Widget build(BuildContext context) {
@@ -20,52 +21,30 @@ class _ComplaintsTabState extends State<ComplaintsTab> {
 
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.all(8),
-          child: SegmentedButton<String>(
-            segments: [
-              ButtonSegment(value: 'attention', label: Text(s.t('attention'))),
-              ButtonSegment(value: 'active', label: Text(s.t('active'))),
-              ButtonSegment(value: 'archived', label: Text(s.t('archived'))),
-            ],
-            selected: {_tab},
-            showSelectedIcon: false,
-            onSelectionChanged: (selection) => setState(() => _tab = selection.first),
-          ),
+        FilterBar(
+          segments: {'attention': s.t('attention'), 'active': s.t('active'), 'archived': s.t('archived')},
+          selected: _tab,
+          onChanged: (value) => setState(() => _tab = value),
         ),
+        SearchField(onChanged: (value) => setState(() => _search = value)),
         Expanded(
           child: PagedList(
             path: '/complaints',
-            query: {'tab': _tab},
+            query: {'tab': _tab, if (_search.isNotEmpty) 'search': _search},
+            emptyIcon: Icons.campaign_outlined,
             itemBuilder: (context, complaint, refresh) {
               final unread = complaint['is_read'] != true;
-              return ListTile(
-                leading: Icon(
-                  unread ? Icons.mark_email_unread : Icons.campaign_outlined,
-                  color: unread ? brandColor : Colors.grey,
-                ),
-                title: Text(
-                  complaint['excerpt']?.toString() ?? '',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontWeight: unread ? FontWeight.w800 : FontWeight.w500),
-                ),
-                subtitle: Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Pill(s.t(complaint['priority']?.toString() ?? ''),
-                          color: priorityColor(complaint['priority']?.toString())),
-                      Text(
-                        '${complaint['reference']} · ${complaint['name'] ?? s.t('anonymous')} · ${shortDate(complaint['created_at'])}',
-                        style: const TextStyle(fontSize: 11),
-                      ),
-                    ],
-                  ),
-                ),
+              final resolved = complaint['is_resolved'] == true;
+              return ItemCard(
+                icon: unread ? Icons.mark_email_unread_outlined : Icons.campaign_outlined,
+                title: complaint['excerpt']?.toString() ?? '',
+                subtitle: '${complaint['reference']} · ${complaint['name'] ?? s.t('anonymous')}',
+                trailing: relativeDate(context, complaint['created_at']),
+                unread: unread,
+                chips: [
+                  Pill(s.t(complaint['priority']?.toString() ?? ''), color: priorityColor(complaint['priority']?.toString())),
+                  if (resolved) Pill(s.t('resolved'), color: statusColor('resolved'), icon: Icons.check),
+                ],
                 onTap: () async {
                   await Navigator.of(context).push(MaterialPageRoute(
                     builder: (_) => ComplaintDetailScreen(id: complaint['id'] as int),

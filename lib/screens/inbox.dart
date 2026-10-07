@@ -8,7 +8,7 @@ import 'complaints.dart';
 import 'contacts.dart';
 import 'tickets.dart';
 
-IconData _categoryIcon(String? category) {
+IconData categoryIcon(String? category) {
   switch (category) {
     case 'it_tickets':
       return Icons.confirmation_number_outlined;
@@ -53,6 +53,58 @@ Future<bool> openTarget(BuildContext context, PushTarget target) async {
   return true;
 }
 
+/// One notification row; marks it read and opens what it points at. Shared by the inbox and the home screen.
+class NotificationCard extends StatelessWidget {
+  const NotificationCard({super.key, required this.item, required this.onChanged});
+
+  final Map<String, dynamic> item;
+  final VoidCallback onChanged;
+
+  Future<void> _open(BuildContext context) async {
+    if (item['read_at'] == null) {
+      try {
+        await api.post('/notifications/${item['id']}/read');
+      } catch (_) {
+        // Opening the item matters more than the read flag
+      }
+    }
+    if (!context.mounted) return;
+
+    final opened = await openTarget(
+      context,
+      PushTarget(item['category']?.toString() ?? '', item['entity_id'] as int?),
+    );
+
+    if (!opened && context.mounted) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(item['title']?.toString() ?? ''),
+          content: SelectableText(item['body']?.toString() ?? ''),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(S.of(context).t('close'))),
+          ],
+        ),
+      );
+    }
+
+    onChanged();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final unread = item['read_at'] == null;
+    return ItemCard(
+      icon: categoryIcon(item['category']?.toString()),
+      title: item['title']?.toString() ?? '',
+      subtitle: item['body']?.toString(),
+      trailing: relativeDate(context, item['created_at']),
+      unread: unread,
+      onTap: () => _open(context),
+    );
+  }
+}
+
 class InboxTab extends StatefulWidget {
   const InboxTab({super.key, required this.onChanged});
 
@@ -65,6 +117,8 @@ class InboxTab extends StatefulWidget {
 
 class InboxTabState extends State<InboxTab> {
   final _list = GlobalKey<PagedListState>();
+  String _filter = 'all';
+  String _search = '';
 
   void refresh() => _list.currentState?.refresh();
 
@@ -78,71 +132,48 @@ class InboxTabState extends State<InboxTab> {
     }
   }
 
-  Future<void> _open(Map<String, dynamic> item, VoidCallback refreshList) async {
-    if (item['read_at'] == null) {
-      try {
-        await api.post('/notifications/${item['id']}/read');
-      } catch (_) {
-        // Opening the item matters more than the read flag
-      }
-    }
-    if (!mounted) return;
-
-    final opened = await openTarget(
-      context,
-      PushTarget(item['category']?.toString() ?? '', item['entity_id'] as int?),
-    );
-
-    if (!opened && mounted) {
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(item['title']?.toString() ?? ''),
-          content: SelectableText(item['body']?.toString() ?? ''),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK')),
-          ],
-        ),
-      );
-    }
-
-    refreshList();
-    widget.onChanged();
-  }
-
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
 
-    return PagedList(
-      key: _list,
-      path: '/notifications',
-      header: Align(
-        alignment: AlignmentDirectional.centerEnd,
-        child: TextButton.icon(
-          onPressed: _markAll,
-          icon: const Icon(Icons.done_all, size: 18),
-          label: Text(s.t('mark_all')),
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: FilterBar(
+                segments: {'all': s.t('all'), 'unread': s.t('unread')},
+                selected: _filter,
+                onChanged: (value) => setState(() => _filter = value),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsetsDirectional.only(end: 10, top: 6),
+              child: IconButton.filledTonal(
+                tooltip: s.t('mark_all'),
+                onPressed: _markAll,
+                icon: const Icon(Icons.done_all),
+              ),
+            ),
+          ],
         ),
-      ),
-      itemBuilder: (context, item, refreshList) {
-        final unread = item['read_at'] == null;
-        return ListTile(
-          tileColor: unread ? brandColor.withValues(alpha: 0.06) : null,
-          leading: Icon(_categoryIcon(item['category']?.toString()), color: unread ? brandColor : Colors.grey),
-          title: Text(
-            item['title']?.toString() ?? '',
-            style: TextStyle(fontWeight: unread ? FontWeight.w800 : FontWeight.w500),
+        SearchField(onChanged: (value) => setState(() => _search = value)),
+        Expanded(
+          child: PagedList(
+            key: _list,
+            path: '/notifications',
+            query: {if (_filter == 'unread') 'unread': '1', if (_search.isNotEmpty) 'search': _search},
+            emptyIcon: Icons.notifications_none,
+            itemBuilder: (context, item, refreshList) => NotificationCard(
+              item: item,
+              onChanged: () {
+                refreshList();
+                widget.onChanged();
+              },
+            ),
           ),
-          subtitle: Text(
-            '${item['body'] ?? ''}\n${shortDate(item['created_at'])}',
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-          ),
-          isThreeLine: true,
-          onTap: () => _open(item, refreshList),
-        );
-      },
+        ),
+      ],
     );
   }
 }

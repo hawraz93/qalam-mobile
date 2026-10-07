@@ -5,19 +5,6 @@ import '../strings.dart';
 import '../widgets.dart';
 import 'ticket_form.dart';
 
-Color _statusColor(String? status) {
-  switch (status) {
-    case 'open':
-      return Colors.red.shade700;
-    case 'in_progress':
-      return Colors.orange.shade800;
-    case 'resolved':
-      return Colors.green.shade700;
-    default:
-      return Colors.grey.shade600;
-  }
-}
-
 class _TicketTile extends StatelessWidget {
   const _TicketTile({required this.ticket, required this.admin, required this.onChanged});
 
@@ -29,34 +16,19 @@ class _TicketTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = S.of(context);
     final attention = admin && ticket['needs_attention'] == true;
+    final status = ticket['status']?.toString();
 
-    return ListTile(
-      leading: Icon(
-        attention ? Icons.mark_email_unread : Icons.confirmation_number_outlined,
-        color: attention ? brandColor : Colors.grey,
-      ),
-      title: Text(
-        ticket['title']?.toString() ?? '',
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(fontWeight: attention ? FontWeight.w800 : FontWeight.w500),
-      ),
-      subtitle: Padding(
-        padding: const EdgeInsets.only(top: 6),
-        child: Wrap(
-          spacing: 6,
-          runSpacing: 4,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Pill(s.t(ticket['status']?.toString() ?? ''), color: _statusColor(ticket['status']?.toString())),
-            Pill(s.t(ticket['priority']?.toString() ?? ''), color: priorityColor(ticket['priority']?.toString())),
-            Text(
-              '${ticket['ticket_no']} · ${admin ? '${ticket['requester_name']} · ' : ''}${shortDate(ticket['created_at'])}',
-              style: const TextStyle(fontSize: 11),
-            ),
-          ],
-        ),
-      ),
+    return ItemCard(
+      icon: attention ? Icons.mark_email_unread_outlined : Icons.confirmation_number_outlined,
+      title: ticket['title']?.toString() ?? '',
+      subtitle: '${ticket['ticket_no']}${admin ? ' · ${ticket['requester_name']}' : ''}',
+      trailing: relativeDate(context, ticket['created_at']),
+      unread: attention || (!admin && status == 'open'),
+      accent: statusColor(status),
+      chips: [
+        Pill(s.t(status ?? ''), color: statusColor(status)),
+        Pill(s.t(ticket['priority']?.toString() ?? ''), color: priorityColor(ticket['priority']?.toString())),
+      ],
       onTap: () async {
         await Navigator.of(context).push(MaterialPageRoute(
           builder: (_) => TicketDetailScreen(id: ticket['id'] as int, admin: admin),
@@ -77,15 +49,25 @@ class MyTicketsTab extends StatefulWidget {
 
 class _MyTicketsTabState extends State<MyTicketsTab> {
   final _list = GlobalKey<PagedListState>();
+  String _search = '';
 
   @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        PagedList(
-          key: _list,
-          path: '/my/tickets',
-          itemBuilder: (context, ticket, refresh) => _TicketTile(ticket: ticket, admin: false, onChanged: refresh),
+        Column(
+          children: [
+            SearchField(onChanged: (value) => setState(() => _search = value)),
+            Expanded(
+              child: PagedList(
+                key: _list,
+                path: '/my/tickets',
+                query: {if (_search.isNotEmpty) 'search': _search},
+                emptyIcon: Icons.confirmation_number_outlined,
+                itemBuilder: (context, ticket, refresh) => _TicketTile(ticket: ticket, admin: false, onChanged: refresh),
+              ),
+            ),
+          ],
         ),
         PositionedDirectional(
           end: 16,
@@ -117,6 +99,7 @@ class AdminTicketsTab extends StatefulWidget {
 
 class _AdminTicketsTabState extends State<AdminTicketsTab> {
   String _tab = 'attention';
+  String _search = '';
 
   @override
   Widget build(BuildContext context) {
@@ -124,23 +107,17 @@ class _AdminTicketsTabState extends State<AdminTicketsTab> {
 
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.all(8),
-          child: SegmentedButton<String>(
-            segments: [
-              ButtonSegment(value: 'attention', label: Text(s.t('attention'))),
-              ButtonSegment(value: 'active', label: Text(s.t('active'))),
-              ButtonSegment(value: 'archived', label: Text(s.t('archived'))),
-            ],
-            selected: {_tab},
-            showSelectedIcon: false,
-            onSelectionChanged: (selection) => setState(() => _tab = selection.first),
-          ),
+        FilterBar(
+          segments: {'attention': s.t('attention'), 'active': s.t('active'), 'archived': s.t('archived')},
+          selected: _tab,
+          onChanged: (value) => setState(() => _tab = value),
         ),
+        SearchField(onChanged: (value) => setState(() => _search = value)),
         Expanded(
           child: PagedList(
             path: '/tickets',
-            query: {'tab': _tab},
+            query: {'tab': _tab, if (_search.isNotEmpty) 'search': _search},
+            emptyIcon: Icons.confirmation_number_outlined,
             itemBuilder: (context, ticket, refresh) => _TicketTile(ticket: ticket, admin: true, onChanged: refresh),
           ),
         ),
@@ -186,7 +163,7 @@ class _TicketHeader extends StatelessWidget {
         const SizedBox(height: 8),
         Wrap(spacing: 6, children: [
           Pill(ticket['ticket_no']?.toString() ?? ''),
-          Pill(s.t(ticket['status']?.toString() ?? ''), color: _statusColor(ticket['status']?.toString())),
+          Pill(s.t(ticket['status']?.toString() ?? ''), color: statusColor(ticket['status']?.toString())),
           Pill(s.t(ticket['priority']?.toString() ?? ''), color: priorityColor(ticket['priority']?.toString())),
         ]),
         const SizedBox(height: 12),

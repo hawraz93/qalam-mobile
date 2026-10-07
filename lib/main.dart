@@ -2,38 +2,66 @@ import 'dart:async';
 import 'dart:ui' show PlatformDispatcher;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'api.dart';
+import 'lock.dart';
 import 'push.dart';
-import 'screens/complaints.dart';
-import 'screens/contacts.dart';
+import 'screens/account.dart';
+import 'screens/home.dart';
 import 'screens/inbox.dart';
 import 'screens/ticket_form.dart';
-import 'screens/tickets.dart';
-import 'screens/web_page.dart';
+import 'screens/work.dart';
 import 'strings.dart';
+import 'theme.dart';
+import 'update.dart';
 import 'widgets.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  S.useDeviceLanguage(PlatformDispatcher.instance.locale.languageCode);
+
+  final saved = await api.readSetting('lang');
+  if (saved != null && S.supported.contains(saved)) {
+    S.current = saved;
+  } else {
+    S.useDeviceLanguage(PlatformDispatcher.instance.locale.languageCode);
+  }
+
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+  ));
+
+  await AppLock.load();
   await Push.init();
   runApp(const QalamApp());
 }
 
-class QalamApp extends StatelessWidget {
+class QalamApp extends StatefulWidget {
   const QalamApp({super.key});
+
+  /// Rebuilds the whole app after the language changes on the account page.
+  static void relaunch(BuildContext context) => context.findAncestorStateOfType<_QalamAppState>()?._bump();
+
+  @override
+  State<QalamApp> createState() => _QalamAppState();
+}
+
+class _QalamAppState extends State<QalamApp> {
+  int _generation = 0;
+
+  void _bump() => setState(() => _generation++);
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Al-Qalam Alerts',
+      key: ValueKey(_generation),
+      title: 'Al-Qalam',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: brandColor),
-      ),
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
+      themeMode: ThemeMode.system,
       // Kurdish uses the Arabic Material locale (right-to-left); the app's own texts come from S.
       locale: S.isRtl ? const Locale('ar') : const Locale('en'),
       supportedLocales: const [Locale('ar'), Locale('en')],
@@ -84,7 +112,18 @@ class _GateState extends State<Gate> {
   @override
   Widget build(BuildContext context) {
     if (_checking) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset('assets/logo.png', height: 96),
+              const SizedBox(height: 24),
+              const SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 2.5)),
+            ],
+          ),
+        ),
+      );
     }
     if (_error != null) {
       return Scaffold(body: ErrorView(error: _error!, onRetry: _restore));
@@ -92,7 +131,7 @@ class _GateState extends State<Gate> {
     if (!api.isSignedIn) {
       return LoginScreen(onSignedIn: () => setState(() {}));
     }
-    return HomeScreen(onSignedOut: () => setState(() {}));
+    return LockGate(child: HomeScreen(onSignedOut: () => setState(() {})));
   }
 }
 
@@ -109,6 +148,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _login = TextEditingController();
   final _password = TextEditingController();
   bool _busy = false;
+  bool _show = false;
   String? _error;
   bool _guestTickets = false;
 
@@ -149,68 +189,111 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
+    final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Image.asset('assets/logo.png', height: 120),
-                  const SizedBox(height: 12),
-                  Text(s.t('app'), textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineSmall),
-                  const SizedBox(height: 32),
-                  TextField(
-                    controller: _login,
-                    textDirection: TextDirection.ltr,
-                    autocorrect: false,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: InputDecoration(labelText: s.t('login_field'), border: const OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _password,
-                    textDirection: TextDirection.ltr,
-                    obscureText: true,
-                    onSubmitted: (_) => _submit(),
-                    decoration: InputDecoration(labelText: s.t('password'), border: const OutlineInputBorder()),
-                  ),
-                  if (_error != null) ...[
-                    const SizedBox(height: 12),
-                    Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-                  ],
-                  const SizedBox(height: 20),
-                  FilledButton(
-                    onPressed: _busy ? null : _submit,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+      body: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              gradient: brandGradient(context),
+              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(36)),
+            ),
+            padding: EdgeInsets.fromLTRB(24, MediaQuery.paddingOf(context).top + 40, 24, 36),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(28)),
+                  child: Image.asset('assets/logo.png', height: 84),
+                ),
+                const SizedBox(height: 18),
+                Text(s.t('app'),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                Text(s.t('login_subtitle'),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 13)),
+              ],
+            ),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextField(
+                      controller: _login,
+                      textDirection: TextDirection.ltr,
+                      autocorrect: false,
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      decoration: InputDecoration(labelText: s.t('login_field'), prefixIcon: const Icon(Icons.person_outline)),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: _password,
+                      textDirection: TextDirection.ltr,
+                      obscureText: !_show,
+                      onSubmitted: (_) => _submit(),
+                      decoration: InputDecoration(
+                        labelText: s.t('password'),
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        suffixIcon: IconButton(
+                          icon: Icon(_show ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                          onPressed: () => setState(() => _show = !_show),
+                        ),
+                      ),
+                    ),
+                    if (_error != null) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(color: scheme.errorContainer, borderRadius: BorderRadius.circular(12)),
+                        child: Row(children: [
+                          Icon(Icons.error_outline, color: scheme.onErrorContainer, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(_error!, style: TextStyle(color: scheme.onErrorContainer, fontSize: 13))),
+                        ]),
+                      ),
+                    ],
+                    const SizedBox(height: 22),
+                    FilledButton(
+                      onPressed: _busy ? null : _submit,
                       child: _busy
                           ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                           : Text(s.t('login')),
                     ),
-                  ),
-                  if (_guestTickets) ...[
-                    const SizedBox(height: 24),
-                    OutlinedButton.icon(
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const TicketFormScreen()),
+                    if (_guestTickets) ...[
+                      const SizedBox(height: 28),
+                      Row(children: [
+                        const Expanded(child: Divider()),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Text(s.t('or'), style: TextStyle(color: scheme.outline, fontSize: 12)),
+                        ),
+                        const Expanded(child: Divider()),
+                      ]),
+                      const SizedBox(height: 16),
+                      OutlinedButton.icon(
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const TicketFormScreen()),
+                        ),
+                        icon: const Icon(Icons.support_agent),
+                        label: Text(s.t('guest_ticket'), textAlign: TextAlign.center),
                       ),
-                      icon: const Icon(Icons.support_agent),
-                      label: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        child: Text(s.t('guest_ticket'), textAlign: TextAlign.center),
-                      ),
-                    ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -230,9 +313,9 @@ class PushWarning extends StatelessWidget {
 
     final (String text, IconData icon, Color background, Color foreground) = switch (health.problem) {
       PushProblem.blocked => (s.t('push_blocked'), Icons.notifications_off_outlined, scheme.errorContainer, scheme.onErrorContainer),
-      PushProblem.silent => (s.t('push_silent'), Icons.volume_off_outlined, Colors.orange.shade100, Colors.orange.shade900),
-      PushProblem.phoneMuted => (s.t('push_phone_muted'), Icons.vibration, Colors.orange.shade100, Colors.orange.shade900),
-      PushProblem.battery => (s.t('push_battery'), Icons.battery_alert_outlined, Colors.amber.shade100, Colors.brown.shade800),
+      PushProblem.silent => (s.t('push_silent'), Icons.volume_off_outlined, const Color(0xFFFFE9C6), const Color(0xFF7A4100)),
+      PushProblem.phoneMuted => (s.t('push_phone_muted'), Icons.vibration, const Color(0xFFFFE9C6), const Color(0xFF7A4100)),
+      PushProblem.battery => (s.t('push_battery'), Icons.battery_alert_outlined, const Color(0xFFFFF4CC), const Color(0xFF5D4300)),
       _ => (s.t('push_unavailable'), Icons.cloud_off_outlined, scheme.surfaceContainerHighest, scheme.onSurfaceVariant),
     };
 
@@ -263,34 +346,28 @@ class PushWarning extends StatelessWidget {
 
     return Material(
       color: background,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(icon, color: foreground),
-                const SizedBox(width: 12),
-                Expanded(child: Text(text, style: TextStyle(color: foreground, height: 1.4))),
-              ],
-            ),
-            Row(mainAxisAlignment: MainAxisAlignment.end, children: actions),
-          ],
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(icon, color: foreground),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(text, style: TextStyle(color: foreground, height: 1.4, fontSize: 13.5))),
+                ],
+              ),
+              Row(mainAxisAlignment: MainAxisAlignment.end, children: actions),
+            ],
+          ),
         ),
       ),
     );
   }
-}
-
-class _Section {
-  _Section(this.key, this.icon, this.body, {this.badge});
-
-  final String key;
-  final IconData icon;
-  final Widget body;
-  final int? badge;
 }
 
 class HomeScreen extends StatefulWidget {
@@ -303,14 +380,19 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+  final _home = GlobalKey<HomeTabState>();
   final _inbox = GlobalKey<InboxTabState>();
+  final _work = GlobalKey<WorkTabState>();
   final List<StreamSubscription<dynamic>> _subscriptions = [];
   Map<String, dynamic> _summary = {};
   int _index = 0;
   PushHealth _health = const PushHealth(PushProblem.none);
+  UpdateInfo? _update;
 
   /// The battery warning is advice, not a blocker: once skipped it stays hidden this session.
   static bool _batteryWarningSkipped = false;
+
+  static const _tabs = ['home', 'inbox', 'work', 'account'];
 
   @override
   void initState() {
@@ -319,8 +401,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     Push.registerDevice().then((_) => _checkPushHealth());
     _subscriptions.add(Push.foreground.stream.listen((message) {
-      _loadSummary();
-      _inbox.currentState?.refresh();
+      _refreshAll();
       if (mounted) {
         toast(context, message.notification?.title ?? S.of(context).t('new_push'));
       }
@@ -331,6 +412,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     });
 
     _loadSummary();
+    _checkUpdate();
+  }
+
+  Future<void> _checkUpdate() async {
+    final info = await AppUpdate.check();
+    if (info == null || !mounted) return;
+    if (info.required) {
+      showRequiredUpdateDialog(context, info);
+      return;
+    }
+    if (await AppUpdate.wasDismissed(info.version)) return;
+    if (mounted) setState(() => _update = info);
   }
 
   @override
@@ -344,12 +437,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
+      AppLock.onPaused();
+    }
     if (state == AppLifecycleState.resumed) {
-      _loadSummary();
-      _inbox.currentState?.refresh();
+      AppLock.onResumed();
+      _refreshAll();
       // The user may just have come back from the settings page the warning opened
       _checkPushHealth();
     }
+  }
+
+  void _refreshAll() {
+    _loadSummary();
+    _inbox.currentState?.refresh();
+    _home.currentState?.refresh();
   }
 
   Future<void> _checkPushHealth() async {
@@ -360,8 +462,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _openTarget(PushTarget target) async {
     if (!mounted) return;
     await openTarget(context, target);
-    _loadSummary();
-    _inbox.currentState?.refresh();
+    _refreshAll();
   }
 
   Future<void> _loadSummary() async {
@@ -373,136 +474,91 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _logout() async {
-    await api.logout(deviceToken: Push.deviceToken);
-    widget.onSignedOut();
-  }
-
-  /// Raw phone-side notification state plus a local test notification, for troubleshooting sound.
-  Future<void> _showPushCheck() async {
-    final s = S.of(context);
-    final status = await Push.rawStatus();
-    if (!mounted) return;
-
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(s.t('push_check')),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (final entry in status.entries)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
-                  child: Text('${entry.key}: ${entry.value}',
-                      textDirection: TextDirection.ltr, style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),
-                ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Push.showTest(s.t('test_title'), s.t('test_body')),
-            child: Text(s.t('send_test')),
-          ),
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(s.t('close'))),
-        ],
-      ),
-    );
+  void _openTab(String key, {String? section}) {
+    setState(() => _index = _tabs.indexOf(key));
+    if (section != null) {
+      // The work tab may not be built yet when the home screen asks for a section
+      WidgetsBinding.instance.addPostFrameCallback((_) => _work.currentState?.show(section));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
+    final hasWorkAreas = api.can('it_tickets') || api.can('complaints') || api.can('contacts');
+    final workBadge = hasWorkAreas
+        ? [(_summary['it_tickets'] as int?) ?? 0, (_summary['complaints'] as int?) ?? 0, (_summary['contacts'] as int?) ?? 0]
+            .fold(0, (a, b) => a + b)
+        : (_summary['my_open_tickets'] as int?) ?? 0;
 
-    final sections = <_Section>[
-      _Section('inbox', Icons.notifications_none, InboxTab(key: _inbox, onChanged: _loadSummary),
-          badge: _summary['unread_notifications'] as int?),
-      if (api.can('it_tickets'))
-        _Section('tickets', Icons.confirmation_number_outlined, const AdminTicketsTab(),
-            badge: _summary['it_tickets'] as int?),
-      if (api.can('complaints'))
-        _Section('complaints', Icons.campaign_outlined, const ComplaintsTab(), badge: _summary['complaints'] as int?),
-      if (api.can('contacts'))
-        _Section('contacts', Icons.mail_outline, const ContactsTab(), badge: _summary['contacts'] as int?),
-      _Section('my_tickets', Icons.person_outline, const MyTicketsTab(),
-          badge: _summary['my_open_tickets'] as int?),
+    final showWarning = _health.problem != PushProblem.none && !(_health.problem == PushProblem.battery && _batteryWarningSkipped);
+
+    final pages = [
+      HomeTab(key: _home, summary: _summary, onRefresh: _loadSummary, onOpenTab: _openTab),
+      InboxTab(key: _inbox, onChanged: _loadSummary),
+      WorkTab(key: _work, onChanged: _loadSummary),
+      AccountTab(
+        onSignedOut: widget.onSignedOut,
+        onLanguageChanged: () => QalamApp.relaunch(context),
+      ),
     ];
 
-    final index = _index.clamp(0, sections.length - 1).toInt();
+    // Home and account draw their own gradient headers; the other tabs use a plain app bar
+    final plainBar = _index == 1 || _index == 2;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(s.t(sections[index].key)),
-        actions: [
-          PopupMenuButton<String>(
-            tooltip: s.t('menu'),
-            icon: const Icon(Icons.account_circle_outlined),
-            onSelected: (value) {
-              if (value == 'logout') {
-                _logout();
-                return;
-              }
-              if (value == 'push_check') {
-                _showPushCheck();
-                return;
-              }
-              final link = api.webLinks.firstWhere((link) => link['path'] == value);
-              Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => WebPageScreen(path: value, title: s.t(link['key'].toString())),
-              ));
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem<String>(
-                enabled: false,
-                child: Text(api.user?['name']?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w700)),
-              ),
-              const PopupMenuDivider(),
-              // Teacher portfolio pages and the account page, opened from the website signed in
-              for (final link in api.webLinks)
-                PopupMenuItem<String>(value: link['path'].toString(), child: Text(s.t(link['key'].toString()))),
-              const PopupMenuDivider(),
-              PopupMenuItem<String>(value: 'push_check', child: Text(s.t('push_check'))),
-              PopupMenuItem<String>(value: 'logout', child: Text(s.t('logout'))),
-            ],
-          ),
-        ],
-      ),
+      appBar: plainBar
+          ? AppBar(title: Text(s.t(_index == 2 && !hasWorkAreas ? 'my_tickets' : _tabs[_index])))
+          : null,
       body: Column(
         children: [
-          if (_health.problem != PushProblem.none &&
-              !(_health.problem == PushProblem.battery && _batteryWarningSkipped))
+          if (_update != null)
+            UpdateBanner(
+              info: _update!,
+              onDismiss: () {
+                AppUpdate.dismiss(_update!.version);
+                setState(() => _update = null);
+              },
+            ),
+          if (showWarning)
             PushWarning(
               health: _health,
-              onSkip: _health.problem == PushProblem.battery
-                  ? () => setState(() => _batteryWarningSkipped = true)
-                  : null,
+              onSkip: _health.problem == PushProblem.battery ? () => setState(() => _batteryWarningSkipped = true) : null,
             ),
-          Expanded(
-            child: IndexedStack(
-              index: index,
-              children: [for (final section in sections) section.body],
-            ),
-          ),
+          Expanded(child: IndexedStack(index: _index, children: pages)),
         ],
       ),
       bottomNavigationBar: NavigationBar(
-        selectedIndex: index,
+        selectedIndex: _index,
         onDestinationSelected: (value) {
           setState(() => _index = value);
           _loadSummary();
         },
         destinations: [
-          for (final section in sections)
-            NavigationDestination(
-              icon: Badge(
-                isLabelVisible: (section.badge ?? 0) > 0,
-                label: Text('${section.badge ?? 0}'),
-                child: Icon(section.icon),
-              ),
-              label: s.t(section.key),
+          NavigationDestination(icon: const Icon(Icons.home_outlined), selectedIcon: const Icon(Icons.home), label: s.t('home')),
+          NavigationDestination(
+            icon: Badge(
+              isLabelVisible: ((_summary['unread_notifications'] as int?) ?? 0) > 0,
+              label: Text('${_summary['unread_notifications'] ?? 0}'),
+              child: const Icon(Icons.notifications_none),
             ),
+            selectedIcon: const Icon(Icons.notifications),
+            label: s.t('inbox'),
+          ),
+          NavigationDestination(
+            icon: Badge(
+              isLabelVisible: workBadge > 0,
+              label: Text('$workBadge'),
+              child: Icon(hasWorkAreas ? Icons.work_outline : Icons.confirmation_number_outlined),
+            ),
+            selectedIcon: Icon(hasWorkAreas ? Icons.work : Icons.confirmation_number),
+            label: s.t(hasWorkAreas ? 'work' : 'my_tickets'),
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.person_outline),
+            selectedIcon: const Icon(Icons.person),
+            label: s.t('account'),
+          ),
         ],
       ),
     );

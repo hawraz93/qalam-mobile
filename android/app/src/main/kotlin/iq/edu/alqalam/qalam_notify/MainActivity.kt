@@ -9,7 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
@@ -18,7 +18,8 @@ import io.flutter.plugin.common.MethodChannel
  * (notifications blocked, channel muted, battery optimisation) and to open the matching
  * system settings page. Everything here is Android framework only; no extra packages.
  */
-class MainActivity : FlutterActivity() {
+// FlutterFragmentActivity: required by local_auth (fingerprint / face unlock)
+class MainActivity : FlutterFragmentActivity() {
     private val channelId = "qalam_alerts"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {

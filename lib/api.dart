@@ -40,6 +40,45 @@ class Api {
 
   bool can(String area) => (user?['can'] as Map?)?[area] == true;
 
+  bool get isAdmin => user?['is_admin'] == true;
+  bool get isTeacher => user?['is_teacher'] == true;
+
+  /// Small per-phone settings (language) kept next to the token.
+  Future<String?> readSetting(String key) async {
+    try {
+      return await _storage.read(key: 'setting_$key');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> writeSetting(String key, String value) async {
+    try {
+      await _storage.write(key: 'setting_$key', value: value);
+    } catch (_) {
+      // A lost preference is not worth an error
+    }
+  }
+
+  Future<void> deleteSetting(String key) async {
+    try {
+      await _storage.delete(key: 'setting_$key');
+    } catch (_) {
+      // Already gone
+    }
+  }
+
+  /// Saves the account edits made in the app and refreshes the cached profile.
+  Future<void> updateProfile(Map<String, dynamic> fields) async {
+    final body = await patch('/me', fields);
+    user = Map<String, dynamic>.from(body['user'] as Map);
+  }
+
+  Future<void> refreshProfile() async {
+    final body = await get('/me');
+    user = Map<String, dynamic>.from(body['user'] as Map);
+  }
+
   /// Website pages this user may open inside the app: [{key, path}, ...].
   List<Map<String, dynamic>> get webLinks => [
         for (final link in (user?['web_links'] as List? ?? []))
@@ -115,6 +154,27 @@ class Api {
   Future<dynamic> delete(String path, [Map<String, dynamic>? body]) =>
       _send('DELETE', path, body: body);
 
+  Future<dynamic> put(String path, Map<String, dynamic> body) => _send('PUT', path, body: body);
+
+  /// Multipart upload of one file (photo, CV) with optional text fields.
+  Future<dynamic> upload(String path, String field, String filePath, {Map<String, String> fields = const {}}) async {
+    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl$path'))
+      ..headers['Accept'] = 'application/json'
+      ..fields.addAll(fields);
+    if (_token != null) {
+      request.headers['Authorization'] = 'Bearer $_token';
+    }
+    request.files.add(await http.MultipartFile.fromPath(field, filePath));
+
+    final http.Response response;
+    try {
+      response = await http.Response.fromStream(await request.send().timeout(const Duration(seconds: 90)));
+    } catch (_) {
+      throw ApiException(0, 'network');
+    }
+    return _handle(response);
+  }
+
   Future<dynamic> _send(
     String method,
     String path, {
@@ -145,6 +205,10 @@ class Api {
       throw ApiException(0, 'network');
     }
 
+    return _handle(response);
+  }
+
+  Future<dynamic> _handle(http.Response response) async {
     dynamic decoded;
     try {
       decoded = response.body.isEmpty ? null : jsonDecode(utf8.decode(response.bodyBytes));
