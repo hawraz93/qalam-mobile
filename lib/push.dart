@@ -5,9 +5,42 @@ import 'dart:io' show Platform;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'api.dart';
+
+/// Why a push might not reach this phone, in the order the user should fix them.
+enum PushProblem {
+  /// Everything looks fine.
+  none,
+
+  /// No Google services / Firebase could not hand out a token: push is impossible here.
+  unavailable,
+
+  /// Notifications are turned off for the app (permission denied or the alerts channel blocked).
+  blocked,
+
+  /// Notifications show but the alerts channel is set to silent.
+  silent,
+
+  /// The phone may kill the app in the background, so pushes stop once the app is closed.
+  battery,
+}
+
+class PushHealth {
+  const PushHealth(this.problem, {this.manufacturer = ''});
+
+  final PushProblem problem;
+  final String manufacturer;
+
+  /// Vendors with their own "autostart" page on top of Android's battery optimisation.
+  bool get hasAutostartPage {
+    final m = manufacturer.toLowerCase();
+    return const ['xiaomi', 'redmi', 'poco', 'huawei', 'honor', 'oppo', 'realme', 'vivo', 'iqoo', 'oneplus', 'asus', 'hmd', 'nokia']
+        .any(m.contains);
+  }
+}
 
 /// What a push notification points at.
 class PushTarget {
@@ -25,7 +58,15 @@ class PushTarget {
 
 class Push {
   static bool _ready = false;
+  static bool _tokenFailed = false;
+  static bool _permissionDenied = false;
   static String? deviceToken;
+
+  /// Talks to MainActivity.kt (Android only).
+  static const _device = MethodChannel('qalam/device');
+
+  /// "Xiaomi Redmi Note 12 (Android 14)", shown in the admin device list.
+  static String _deviceLabel = Platform.operatingSystem;
 
   /// Same id as the server sends in the FCM payload (android.notification.channel_id)
   static const _channel = AndroidNotificationChannel(
@@ -82,6 +123,70 @@ class Push {
     FirebaseMessaging.onMessage.listen(_showForeground);
     FirebaseMessaging.onMessageOpenedApp.listen(_handleOpen);
     FirebaseMessaging.instance.onTokenRefresh.listen(_sendToken);
+
+    final status = await _status();
+    if (status != null) {
+      _deviceLabel = '${status['manufacturer']} ${status['model']} (Android ${status['androidVersion']})';
+    }
+  }
+
+  static Future<Map<String, dynamic>?> _status() async {
+    if (!Platform.isAndroid) return null;
+    try {
+      final status = await _device.invokeMapMethod<String, dynamic>('status');
+      return status;
+    } catch (e) {
+      debugPrint('Device status unavailable: $e');
+      return null;
+    }
+  }
+
+  /// Checks the phone-side reasons a push would not show or make a sound.
+  static Future<PushHealth> health() async {
+    if (!_ready || _tokenFailed) return const PushHealth(PushProblem.unavailable);
+    if (!Platform.isAndroid) return const PushHealth(PushProblem.none);
+
+    final status = await _status();
+    if (status == null) return const PushHealth(PushProblem.none);
+
+    final manufacturer = status['manufacturer']?.toString() ?? '';
+    final channelImportance = status['channelImportance'] as int?;
+
+    // 0 = IMPORTANCE_NONE: the user blocked the channel itself
+    if (_permissionDenied || status['notificationsEnabled'] == false || channelImportance == 0) {
+      return PushHealth(PushProblem.blocked, manufacturer: manufacturer);
+    }
+    if (status['channelSound'] == false) {
+      return PushHealth(PushProblem.silent, manufacturer: manufacturer);
+    }
+    if (status['batteryOptimized'] == true) {
+      return PushHealth(PushProblem.battery, manufacturer: manufacturer);
+    }
+    return PushHealth(PushProblem.none, manufacturer: manufacturer);
+  }
+
+  static Future<void> openNotificationSettings({bool channel = false}) async {
+    try {
+      await _device.invokeMethod('openNotificationSettings', {'channel': channel});
+    } catch (e) {
+      debugPrint('Could not open notification settings: $e');
+    }
+  }
+
+  static Future<void> allowBackground() async {
+    try {
+      await _device.invokeMethod('requestIgnoreBatteryOptimizations');
+    } catch (e) {
+      debugPrint('Could not open battery settings: $e');
+    }
+  }
+
+  static Future<void> openAutostartSettings() async {
+    try {
+      await _device.invokeMethod('openAutostartSettings');
+    } catch (e) {
+      debugPrint('Could not open autostart settings: $e');
+    }
   }
 
   /// The notification that launched the app from a terminated state, if any.
@@ -96,12 +201,17 @@ class Push {
     if (!_ready) return;
 
     try {
-      await FirebaseMessaging.instance.requestPermission();
+      final settings = await FirebaseMessaging.instance.requestPermission();
+      _permissionDenied = settings.authorizationStatus == AuthorizationStatus.denied;
+
+      // Throws or returns null on phones without Google services (Huawei 2019+, some imports)
       final token = await FirebaseMessaging.instance.getToken();
+      _tokenFailed = token == null;
       if (token != null) {
         await _sendToken(token);
       }
     } catch (e) {
+      _tokenFailed = true;
       debugPrint('Could not register for push: $e');
     }
   }
@@ -114,7 +224,7 @@ class Push {
       await api.post('/devices', {
         'token': token,
         'platform': Platform.isIOS ? 'ios' : 'android',
-        'device_name': Platform.operatingSystem,
+        'device_name': _deviceLabel,
       });
     } catch (e) {
       debugPrint('Could not send device token: $e');
@@ -138,6 +248,8 @@ class Push {
           channelDescription: _channel.description,
           importance: Importance.high,
           priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
           icon: '@mipmap/ic_launcher',
         ),
       ),

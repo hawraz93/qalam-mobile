@@ -216,6 +216,69 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
+/// Explains why pushes would not show (or stay silent) on this phone, with a button to the fix.
+class PushWarning extends StatelessWidget {
+  const PushWarning({super.key, required this.health, this.onSkip});
+
+  final PushHealth health;
+  final VoidCallback? onSkip;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    final scheme = Theme.of(context).colorScheme;
+
+    final (String text, IconData icon, Color background, Color foreground) = switch (health.problem) {
+      PushProblem.blocked => (s.t('push_blocked'), Icons.notifications_off_outlined, scheme.errorContainer, scheme.onErrorContainer),
+      PushProblem.silent => (s.t('push_silent'), Icons.volume_off_outlined, Colors.orange.shade100, Colors.orange.shade900),
+      PushProblem.battery => (s.t('push_battery'), Icons.battery_alert_outlined, Colors.amber.shade100, Colors.brown.shade800),
+      _ => (s.t('push_unavailable'), Icons.cloud_off_outlined, scheme.surfaceContainerHighest, scheme.onSurfaceVariant),
+    };
+
+    final actions = <Widget>[
+      switch (health.problem) {
+        PushProblem.blocked => TextButton(
+            onPressed: () => Push.openNotificationSettings(),
+            child: Text(s.t('open_settings')),
+          ),
+        PushProblem.silent => TextButton(
+            onPressed: () => Push.openNotificationSettings(channel: true),
+            child: Text(s.t('open_settings')),
+          ),
+        PushProblem.battery => TextButton(
+            onPressed: Push.allowBackground,
+            child: Text(s.t('allow_background')),
+          ),
+        _ => const SizedBox.shrink(),
+      },
+      if (health.problem == PushProblem.battery && health.hasAutostartPage)
+        TextButton(onPressed: Push.openAutostartSettings, child: Text(s.t('autostart'))),
+      if (onSkip != null) TextButton(onPressed: onSkip, child: Text(s.t('later'))),
+    ];
+
+    return Material(
+      color: background,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(icon, color: foreground),
+                const SizedBox(width: 12),
+                Expanded(child: Text(text, style: TextStyle(color: foreground, height: 1.4))),
+              ],
+            ),
+            Row(mainAxisAlignment: MainAxisAlignment.end, children: actions),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _Section {
   _Section(this.key, this.icon, this.body, {this.badge});
 
@@ -239,13 +302,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final List<StreamSubscription<dynamic>> _subscriptions = [];
   Map<String, dynamic> _summary = {};
   int _index = 0;
+  PushHealth _health = const PushHealth(PushProblem.none);
+
+  /// The battery warning is advice, not a blocker: once skipped it stays hidden this session.
+  static bool _batteryWarningSkipped = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    Push.registerDevice();
+    Push.registerDevice().then((_) => _checkPushHealth());
     _subscriptions.add(Push.foreground.stream.listen((message) {
       _loadSummary();
       _inbox.currentState?.refresh();
@@ -275,7 +342,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       _loadSummary();
       _inbox.currentState?.refresh();
+      // The user may just have come back from the settings page the warning opened
+      _checkPushHealth();
     }
+  }
+
+  Future<void> _checkPushHealth() async {
+    final health = await Push.health();
+    if (mounted) setState(() => _health = health);
   }
 
   Future<void> _openTarget(PushTarget target) async {
@@ -351,9 +425,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
         ],
       ),
-      body: IndexedStack(
-        index: index,
-        children: [for (final section in sections) section.body],
+      body: Column(
+        children: [
+          if (_health.problem != PushProblem.none &&
+              !(_health.problem == PushProblem.battery && _batteryWarningSkipped))
+            PushWarning(
+              health: _health,
+              onSkip: _health.problem == PushProblem.battery
+                  ? () => setState(() => _batteryWarningSkipped = true)
+                  : null,
+            ),
+          Expanded(
+            child: IndexedStack(
+              index: index,
+              children: [for (final section in sections) section.body],
+            ),
+          ),
+        ],
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,

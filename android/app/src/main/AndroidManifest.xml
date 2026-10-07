@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Lets the app ask "allow running in background?" so pushes still arrive after the phone kills it -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <application
         android:label="Al-Qalam"
         android:name="${applicationName}"
@@ -49,5 +51,17 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Vendor "autostart" / background pages opened from the notification warning (see MainActivity) -->
+        <package android:name="com.miui.securitycenter"/>
+        <package android:name="com.huawei.systemmanager"/>
+        <package android:name="com.coloros.safecenter"/>
+        <package android:name="com.oppo.safe"/>
+        <package android:name="com.vivo.permissionmanager"/>
+        <package android:name="com.iqoo.secure"/>
+        <package android:name="com.oneplus.security"/>
+        <package android:name="com.samsung.android.lool"/>
+        <package android:name="com.samsung.android.sm_cn"/>
+        <package android:name="com.asus.mobilemanager"/>
+        <package android:name="com.evenwell.powersaving.g3"/>
     </queries>
 </manifest>
