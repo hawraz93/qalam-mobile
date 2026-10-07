@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "257210180757",
+    "project_id": "al-qalam-13487",
+    "storage_bucket": "al-qalam-13487.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:257210180757:android:e7995eda466b3ba1ada79c",
+        "android_client_info": {
+          "package_name": "iq.edu.alqalam.qalam_notify"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA3PKAKs5Z7RaLRnvt_XGPv6bxieKnvkww"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
