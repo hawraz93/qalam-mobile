@@ -1,82 +1,85 @@
-# Al-Qalam Alerts (mobile app)
+# Al-Qalam mobile app
 
-Flutter app for staff and teachers. It shows the notification inbox, lets the IT team,
-complaints team and contact-us team handle their items, and lets every user follow the
-tickets they opened. It talks to the Laravel API in this repository (`routes/api.php`, prefix `/api/v1`).
+Flutter (Android) app for Al-Qalam University staff and teachers: notification inbox, IT
+tickets, complaints and contact messages for the teams that handle them, the user's own
+tickets, account settings, and the teacher's academic portfolio (profile, photo, CV, office
+hours, education, teaching, research).
 
-> This folder contains only the Dart source (`lib/`) and `pubspec.yaml`.
-> It was written without a Flutter SDK on the machine, so it has **not been compiled yet**.
-> Expect to fix small compile errors on the first `flutter run`.
+It talks to the website's API at `https://alqalam.edu.iq/api/v1`. The API lives in the
+website repository ([hawraz93/qalam-website](https://github.com/hawraz93/qalam-website),
+`app/Http/Controllers/Api/Mobile`, `routes/api.php`).
 
-## First-time setup
+## Run locally
 
-1. Install Flutter (3.19 or newer): https://docs.flutter.dev/get-started/install
-2. Generate the Android / iOS projects inside this folder:
+Requirements: Flutter 3.47 (stable), Android SDK, a phone with USB debugging or an emulator.
 
-   ```
-   cd mobile
-   flutter create . --org iq.edu.alqalam --project-name qalam_notify --platforms android,ios
-   flutter pub get
-   ```
+```
+flutter pub get
+flutter run
+```
 
-   `flutter create` keeps the existing `lib/` and `pubspec.yaml`. Delete the generated `test/widget_test.dart`.
+Against a local copy of the website (the Android emulator reaches the PC at `10.0.2.2`):
 
-3. Push notifications (Firebase), the short way — no Firebase CLI needed:
+```
+php artisan serve                                             # in the website project
+flutter run --dart-define=API_BASE=http://10.0.2.2:8000/api/v1
+```
 
-   1. https://console.firebase.google.com → Add project (name: Al-Qalam).
-   2. In the project: Add app → Android → package name `iq.edu.alqalam.qalam_notify` → Register
-      → Download `google-services.json` → put it in `mobile/android/app/`.
-      The Gradle build picks it up automatically (see `android/app/build.gradle.kts`).
-   3. Project settings → Cloud Messaging → make sure "Firebase Cloud Messaging API (V1)" is enabled.
-   4. Project settings → Service accounts → Generate new private key → open the downloaded JSON,
-      copy its whole content.
-   5. On the website: Notifications settings → "Mobile App" section → paste the JSON, switch push on, save.
-   6. Rebuild the app (`flutter build apk --release`), install it, sign in, then press
-      "Send a test push to my phone" on the website.
+Push notifications need `android/app/google-services.json` from the Firebase project
+`al-qalam-13487` (already in the repo). Without it the app still runs; only push is off.
 
-   Without `google-services.json` the app still builds and runs, only push is off.
+## Release a new version
 
-4. (Optional) `flutterfire configure` does the same as step 3.2 and also sets up iOS.
-
-5. Run against the local site (Android emulator reaches the PC at `10.0.2.2`):
+1. Bump `version:` in `pubspec.yaml` (for example `1.5.0+7`) and `S.appVersion` in
+   `lib/strings.dart`, commit, push.
+2. Tag and push the tag:
 
    ```
-   php artisan serve            # in the Laravel project
-   flutter run --dart-define=API_BASE=http://10.0.2.2:8000/api/v1
+   git tag v1.5.0
+   git push origin v1.5.0
    ```
 
-   Plain `http://` needs `android:usesCleartextTraffic="true"` in the debug `AndroidManifest.xml`.
-   Release builds use `https://alqalam.edu.iq/api/v1` by default.
+3. GitHub Actions builds a signed APK and publishes it under **Releases** as
+   `al-qalam-v1.5.0.apk`. Copy the asset link.
+4. On the website: Notification settings → Mobile app → set "Latest version" to `1.5.0`
+   and paste the link into "APK download link" (set "Minimum allowed version" when older
+   apps must update). Phones show an update prompt the next time the app opens.
 
-## Who sees what
+The tag must match the `pubspec.yaml` version or the workflow stops.
 
-| Tab | Shown to | API |
-| --- | --- | --- |
-| Notifications | everyone | `GET /notifications` |
-| Tickets | users with `it_tickets.manage` | `/tickets` |
-| Complaints | users with `complaint.manage` | `/complaints` |
-| Messages | users with `contact.manage` | `/contacts` |
-| My tickets | everyone (teachers follow replies and status here) | `/my/tickets` |
+### Signing
 
-Permissions are the same Spatie permissions used by the website, so roles are managed in one place.
+Release builds are signed with the keystore described in `android/key.properties`
+(never committed). Keep the keystore file and its passwords somewhere safe: an APK
+signed with a different key cannot be installed over an existing install.
 
-## Tickets without signing in
+- Locally: `android/key.properties` points at the keystore outside the repo.
+- GitHub Actions reads these repository secrets (Settings → Secrets and variables → Actions):
 
-The sign-in screen has an "open an IT ticket without signing in" button (`POST /tickets/submit`).
-An admin can switch it off from the website (IT tickets management → "Sign-in required to open tickets");
-the button then disappears and the server refuses guest tickets. Signed-in users open tickets from the
-"My tickets" tab, and those tickets are tied to their account.
+  | Secret | Value |
+  | --- | --- |
+  | `ANDROID_KEYSTORE_BASE64` | the `.jks` file encoded with base64 |
+  | `ANDROID_KEYSTORE_PASSWORD` | keystore password |
+  | `ANDROID_KEY_ALIAS` | key alias |
+  | `ANDROID_KEY_PASSWORD` | key password |
 
-## Teacher portfolio and account pages
+Without the secrets the release workflow fails on purpose rather than producing a
+debug-signed APK.
 
-The account menu (top corner) opens website pages inside the app, already signed in: academic profile,
-education, teaching, research and biography for teachers, and the account page for everyone
-(employees included). The app asks `POST /web-login` for a one-time link and loads it in a web view,
-so these pages behave exactly as on the website and need no separate maintenance.
-File uploads inside those pages (profile photo, research files) go through the `file_picker` package on Android.
+## Layout
 
-## Before publishing
+| Path | What |
+| --- | --- |
+| `lib/main.dart` | app shell, sign-in, bottom navigation, update and push-health banners |
+| `lib/theme.dart`, `lib/widgets.dart` | design system: colours, Vazirmatn font, cards, lists, pickers |
+| `lib/screens/home.dart` | dashboard |
+| `lib/screens/inbox.dart`, `tickets.dart`, `complaints.dart`, `contacts.dart`, `work.dart` | lists and detail screens |
+| `lib/screens/account.dart` | account, password, language, app lock, notification settings |
+| `lib/screens/teacher.dart`, `portfolio.dart` | academic profile and its lists |
+| `lib/push.dart` | Firebase messaging, device registration, phone-side notification checks |
+| `lib/lock.dart` | PIN / fingerprint lock |
+| `lib/update.dart` | version check against `/config` |
+| `lib/strings.dart` | Arabic, Kurdish and English texts |
+| `android/app/src/main/kotlin/.../MainActivity.kt` | native bridge for notification and battery settings pages |
 
-- iOS push needs an Apple Developer account and an APNs key uploaded to Firebase.
-- Set the app icon and name (`flutter_launcher_icons` is the usual tool).
-- Android: `flutter build appbundle`; iOS: `flutter build ipa`.
+Texts live in `lib/strings.dart` under three maps (`ar`, `ckb`, `en`); add a key to all three.
