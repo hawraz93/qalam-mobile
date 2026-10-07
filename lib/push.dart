@@ -24,6 +24,9 @@ enum PushProblem {
   /// Notifications show but the alerts channel is set to silent.
   silent,
 
+  /// The phone itself is muted: silent/vibrate mode, notification volume at zero or Do Not Disturb.
+  phoneMuted,
+
   /// The phone may kill the app in the background, so pushes stop once the app is closed.
   battery,
 }
@@ -159,6 +162,12 @@ class Push {
     if (status['channelSound'] == false) {
       return PushHealth(PushProblem.silent, manufacturer: manufacturer);
     }
+    // ringerMode 2 = normal; dndFilter 1 = Do Not Disturb off
+    if ((status['ringerMode'] as int? ?? 2) != 2 ||
+        (status['notificationVolume'] as int? ?? 1) == 0 ||
+        (status['dndFilter'] as int? ?? 1) != 1) {
+      return PushHealth(PushProblem.phoneMuted, manufacturer: manufacturer);
+    }
     if (status['batteryOptimized'] == true) {
       return PushHealth(PushProblem.battery, manufacturer: manufacturer);
     }
@@ -187,6 +196,48 @@ class Push {
     } catch (e) {
       debugPrint('Could not open autostart settings: $e');
     }
+  }
+
+  static Future<void> openSoundSettings() async {
+    try {
+      await _device.invokeMethod('openSoundSettings');
+    } catch (e) {
+      debugPrint('Could not open sound settings: $e');
+    }
+  }
+
+  /// Everything the phone reports, for the "notification check" dialog.
+  static Future<Map<String, dynamic>> rawStatus() async {
+    final status = await _status() ?? <String, dynamic>{};
+    return {
+      'firebase': _ready,
+      'token': deviceToken == null ? null : '${deviceToken!.substring(0, 12)}…',
+      'tokenFailed': _tokenFailed,
+      'permissionDenied': _permissionDenied,
+      ...status,
+    };
+  }
+
+  /// Shows a notification on the alerts channel without the server, to test sound on this phone.
+  static Future<void> showTest(String title, String body) async {
+    if (!_ready || !Platform.isAndroid) return;
+    await _local.show(
+      0,
+      title,
+      body,
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          _channel.id,
+          _channel.name,
+          channelDescription: _channel.description,
+          importance: Importance.high,
+          priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
+          icon: '@mipmap/ic_launcher',
+        ),
+      ),
+    );
   }
 
   /// The notification that launched the app from a terminated state, if any.

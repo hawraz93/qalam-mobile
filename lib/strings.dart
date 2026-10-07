@@ -115,6 +115,12 @@ class S {
       'allow_background': 'السماح في الخلفية',
       'autostart': 'التشغيل التلقائي',
       'later': 'لاحقاً',
+      'push_phone_muted': 'الهاتف على الوضع الصامت أو الاهتزاز، أو صوت الإشعارات صفر، أو وضع عدم الإزعاج مفعّل، لذلك لا يصدر صوت.',
+      'push_check': 'فحص الإشعارات',
+      'send_test': 'إشعار تجريبي',
+      'test_title': 'إشعار تجريبي',
+      'test_body': 'إذا سمعت صوتاً فالإشعارات تعمل على هذا الهاتف.',
+      'close': 'إغلاق',
     },
     'ckb': {
       'app': 'ئاگادارییەکانی قەڵەم',
@@ -204,6 +210,12 @@ class S {
       'allow_background': 'ڕێگەدان لە پشتەوە',
       'autostart': 'دەستپێکردنی خۆکار',
       'later': 'دواتر',
+      'push_phone_muted': 'مۆبایلەکە لەسەر بێدەنگ یان لەرینەوەیە، یان ڤۆڵیومی ئاگاداری سفرە، یان Do Not Disturb چالاکە، بۆیە دەنگ نایەت.',
+      'push_check': 'پشکنینی ئاگادارییەکان',
+      'send_test': 'ئاگاداریی تاقیکاری',
+      'test_title': 'ئاگاداریی تاقیکاری',
+      'test_body': 'ئەگەر دەنگت بیست، ئاگادارییەکان لەسەر ئەم مۆبایلە کار دەکەن.',
+      'close': 'داخستن',
     },
     'en': {
       'app': 'Al-Qalam Alerts',
@@ -293,6 +305,12 @@ class S {
       'allow_background': 'Allow in background',
       'autostart': 'Autostart',
       'later': 'Later',
+      'push_phone_muted': 'The phone is on silent or vibrate, the notification volume is zero, or Do Not Disturb is on, so there is no sound.',
+      'push_check': 'Notification check',
+      'send_test': 'Test notification',
+      'test_title': 'Test notification',
+      'test_body': 'If you heard a sound, notifications work on this phone.',
+      'close': 'Close',
     },
   };
 }

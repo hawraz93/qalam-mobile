@@ -231,6 +231,7 @@ class PushWarning extends StatelessWidget {
     final (String text, IconData icon, Color background, Color foreground) = switch (health.problem) {
       PushProblem.blocked => (s.t('push_blocked'), Icons.notifications_off_outlined, scheme.errorContainer, scheme.onErrorContainer),
       PushProblem.silent => (s.t('push_silent'), Icons.volume_off_outlined, Colors.orange.shade100, Colors.orange.shade900),
+      PushProblem.phoneMuted => (s.t('push_phone_muted'), Icons.vibration, Colors.orange.shade100, Colors.orange.shade900),
       PushProblem.battery => (s.t('push_battery'), Icons.battery_alert_outlined, Colors.amber.shade100, Colors.brown.shade800),
       _ => (s.t('push_unavailable'), Icons.cloud_off_outlined, scheme.surfaceContainerHighest, scheme.onSurfaceVariant),
     };
@@ -243,6 +244,10 @@ class PushWarning extends StatelessWidget {
           ),
         PushProblem.silent => TextButton(
             onPressed: () => Push.openNotificationSettings(channel: true),
+            child: Text(s.t('open_settings')),
+          ),
+        PushProblem.phoneMuted => TextButton(
+            onPressed: Push.openSoundSettings,
             child: Text(s.t('open_settings')),
           ),
         PushProblem.battery => TextButton(
@@ -373,6 +378,40 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     widget.onSignedOut();
   }
 
+  /// Raw phone-side notification state plus a local test notification, for troubleshooting sound.
+  Future<void> _showPushCheck() async {
+    final s = S.of(context);
+    final status = await Push.rawStatus();
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(s.t('push_check')),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final entry in status.entries)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Text('${entry.key}: ${entry.value}',
+                      textDirection: TextDirection.ltr, style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Push.showTest(s.t('test_title'), s.t('test_body')),
+            child: Text(s.t('send_test')),
+          ),
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(s.t('close'))),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
@@ -405,6 +444,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 _logout();
                 return;
               }
+              if (value == 'push_check') {
+                _showPushCheck();
+                return;
+              }
               final link = api.webLinks.firstWhere((link) => link['path'] == value);
               Navigator.of(context).push(MaterialPageRoute(
                 builder: (_) => WebPageScreen(path: value, title: s.t(link['key'].toString())),
@@ -420,6 +463,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               for (final link in api.webLinks)
                 PopupMenuItem<String>(value: link['path'].toString(), child: Text(s.t(link['key'].toString()))),
               const PopupMenuDivider(),
+              PopupMenuItem<String>(value: 'push_check', child: Text(s.t('push_check'))),
               PopupMenuItem<String>(value: 'logout', child: Text(s.t('logout'))),
             ],
           ),
