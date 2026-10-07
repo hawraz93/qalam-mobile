@@ -1,0 +1,244 @@
+import 'package:flutter/material.dart';
+
+import '../api.dart';
+import '../strings.dart';
+import '../widgets.dart';
+
+class ComplaintsTab extends StatefulWidget {
+  const ComplaintsTab({super.key});
+
+  @override
+  State<ComplaintsTab> createState() => _ComplaintsTabState();
+}
+
+class _ComplaintsTabState extends State<ComplaintsTab> {
+  String _tab = 'attention';
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(8),
+          child: SegmentedButton<String>(
+            segments: [
+              ButtonSegment(value: 'attention', label: Text(s.t('attention'))),
+              ButtonSegment(value: 'active', label: Text(s.t('active'))),
+              ButtonSegment(value: 'archived', label: Text(s.t('archived'))),
+            ],
+            selected: {_tab},
+            showSelectedIcon: false,
+            onSelectionChanged: (selection) => setState(() => _tab = selection.first),
+          ),
+        ),
+        Expanded(
+          child: PagedList(
+            path: '/complaints',
+            query: {'tab': _tab},
+            itemBuilder: (context, complaint, refresh) {
+              final unread = complaint['is_read'] != true;
+              return ListTile(
+                leading: Icon(
+                  unread ? Icons.mark_email_unread : Icons.campaign_outlined,
+                  color: unread ? brandColor : Colors.grey,
+                ),
+                title: Text(
+                  complaint['excerpt']?.toString() ?? '',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontWeight: unread ? FontWeight.w800 : FontWeight.w500),
+                ),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Pill(s.t(complaint['priority']?.toString() ?? ''),
+                          color: priorityColor(complaint['priority']?.toString())),
+                      Text(
+                        '${complaint['reference']} · ${complaint['name'] ?? s.t('anonymous')} · ${shortDate(complaint['created_at'])}',
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+                onTap: () async {
+                  await Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => ComplaintDetailScreen(id: complaint['id'] as int),
+                  ));
+                  refresh();
+                },
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class ComplaintDetailScreen extends StatelessWidget {
+  const ComplaintDetailScreen({super.key, required this.id});
+
+  final int id;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(S.of(context).t('complaints'))),
+      body: Loader(
+        load: () async {
+          final body = await api.get('/complaints/$id');
+          return Map<String, dynamic>.from(body['data'] as Map);
+        },
+        builder: (context, complaint, reload) => _ComplaintBody(complaint: complaint, reload: reload),
+      ),
+    );
+  }
+}
+
+class _ComplaintBody extends StatefulWidget {
+  const _ComplaintBody({required this.complaint, required this.reload});
+
+  final Map<String, dynamic> complaint;
+  final VoidCallback reload;
+
+  @override
+  State<_ComplaintBody> createState() => _ComplaintBodyState();
+}
+
+class _ComplaintBodyState extends State<_ComplaintBody> {
+  late final _notes = TextEditingController(text: widget.complaint['admin_notes']?.toString() ?? '');
+  final _reply = TextEditingController();
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _notes.dispose();
+    _reply.dispose();
+    super.dispose();
+  }
+
+  Future<void> _run(Future<void> Function() action, String doneKey) async {
+    setState(() => _busy = true);
+    try {
+      await action();
+      if (!mounted) return;
+      toast(context, S.of(context).t(doneKey));
+      widget.reload();
+    } catch (e) {
+      if (mounted) toast(context, errorText(context, e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    final complaint = widget.complaint;
+    final id = complaint['id'];
+    final resolved = complaint['is_resolved'] == true;
+    final canReply = complaint['can_reply_by_email'] == true;
+    final evidence = (complaint['evidence'] as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Wrap(spacing: 6, children: [
+          Pill(complaint['reference']?.toString() ?? ''),
+          Pill(s.t(complaint['priority']?.toString() ?? ''), color: priorityColor(complaint['priority']?.toString())),
+          Pill(s.t(resolved ? 'resolved' : 'open'), color: resolved ? Colors.green.shade700 : Colors.red.shade700),
+        ]),
+        const SizedBox(height: 12),
+        SelectableText(complaint['description']?.toString() ?? '', style: const TextStyle(fontSize: 15, height: 1.6)),
+        const Divider(height: 32),
+        InfoRow(s.t('requester'), complaint['name'] ?? s.t('anonymous')),
+        InfoRow(s.t('phone'), complaint['phone']),
+        InfoRow(s.t('email'), complaint['email']),
+        if (evidence.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text(s.t('attachments'), style: Theme.of(context).textTheme.titleSmall),
+          for (final file in evidence)
+            file['is_image'] == true
+                ? Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        file['url'].toString(),
+                        headers: api.authHeaders,
+                        errorBuilder: (_, __, ___) => Text(file['filename'].toString()),
+                      ),
+                    ),
+                  )
+                : Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Row(children: [
+                      const Icon(Icons.attach_file, size: 16),
+                      const SizedBox(width: 6),
+                      Expanded(child: Text(file['filename'].toString(), style: const TextStyle(fontSize: 12))),
+                    ]),
+                  ),
+        ],
+        const Divider(height: 32),
+        TextField(
+          controller: _notes,
+          minLines: 2,
+          maxLines: 5,
+          decoration: InputDecoration(labelText: s.t('admin_notes'), border: const OutlineInputBorder()),
+        ),
+        const SizedBox(height: 8),
+        Row(children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: _busy
+                  ? null
+                  : () => _run(() => api.patch('/complaints/$id', {'admin_notes': _notes.text}), 'saved'),
+              child: Text(s.t('save')),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: FilledButton(
+              onPressed: _busy
+                  ? null
+                  : () => _run(() => api.patch('/complaints/$id', {'is_resolved': !resolved}), 'saved'),
+              child: Text(s.t(resolved ? 'reopen' : 'resolve')),
+            ),
+          ),
+        ]),
+        const Divider(height: 32),
+        if (!canReply)
+          Text(s.t('no_email'), style: TextStyle(color: Colors.grey.shade600))
+        else ...[
+          TextField(
+            controller: _reply,
+            minLines: 3,
+            maxLines: 8,
+            decoration: InputDecoration(
+              labelText: s.t('reply'),
+              hintText: s.t('reply_hint'),
+              border: const OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          FilledButton.icon(
+            onPressed: _busy
+                ? null
+                : () {
+                    if (_reply.text.trim().length < 5) return;
+                    _run(() => api.post('/complaints/$id/reply', {'message': _reply.text.trim()}), 'reply_sent');
+                  },
+            icon: const Icon(Icons.send),
+            label: Text(s.t('send_reply')),
+          ),
+        ],
+      ],
+    );
+  }
+}
