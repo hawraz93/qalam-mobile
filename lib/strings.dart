@@ -105,6 +105,7 @@ class S {
       'biography': 'السيرة الذاتية',
       'teacher_registration': 'إكمال بيانات التدريسي',
       'account': 'حسابي',
+      'dashboard': 'لوحة التحكم', 'notification_settings': 'إعدادات الإشعارات', 'users': 'المستخدمون',
       'menu': 'القائمة',
     },
     'ckb': {
@@ -185,6 +186,7 @@ class S {
       'biography': 'ژیاننامە',
       'teacher_registration': 'تەواوکردنی زانیاریی مامۆستا',
       'account': 'هەژمارەکەم',
+      'dashboard': 'داشبۆرد', 'notification_settings': 'ڕێکخستنی ئاگادارییەکان', 'users': 'بەکارهێنەران',
       'menu': 'لیست',
     },
     'en': {
@@ -265,6 +267,7 @@ class S {
       'biography': 'Biography',
       'teacher_registration': 'Complete teacher details',
       'account': 'My account',
+      'dashboard': 'Dashboard', 'notification_settings': 'Notification settings', 'users': 'Users',
       'menu': 'Menu',
     },
   };

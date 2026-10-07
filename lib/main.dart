@@ -160,7 +160,7 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Icon(Icons.notifications_active, size: 64, color: brandColor),
+                  Image.asset('assets/logo.png', height: 120),
                   const SizedBox(height: 12),
                   Text(s.t('app'), textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineSmall),
                   const SizedBox(height: 32),

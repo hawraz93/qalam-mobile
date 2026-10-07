@@ -23,6 +23,18 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/logo.png
+
+# University logo as the app icon: dart run flutter_launcher_icons
+flutter_launcher_icons:
+  android: true
+  ios: false # turn on after `flutter create . --platforms ios` on a Mac; also set remove_alpha_ios: true
+  image_path: assets/logo.png
+  adaptive_icon_background: "#ffffff"
+  adaptive_icon_foreground: assets/logo.png
+  adaptive_icon_foreground_inset: 20
