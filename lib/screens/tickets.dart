@@ -308,7 +308,7 @@ class _AdminTicketBodyState extends State<_AdminTicketBody> {
         ),
         const Divider(height: 32),
         DropdownButtonFormField<String>(
-          value: _status,
+          initialValue: _status,
           decoration: InputDecoration(labelText: s.t('status'), border: const OutlineInputBorder()),
           items: [
             for (final status in const ['open', 'in_progress', 'resolved', 'closed'])

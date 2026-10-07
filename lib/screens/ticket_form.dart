@@ -123,7 +123,7 @@ class _TicketFormScreenState extends State<TicketFormScreen> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _category,
+              initialValue: _category,
               decoration: InputDecoration(labelText: s.t('category'), border: border),
               items: [
                 for (final category in const ['hardware', 'software', 'network', 'account', 'printer', 'other'])
@@ -133,7 +133,7 @@ class _TicketFormScreenState extends State<TicketFormScreen> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _priority,
+              initialValue: _priority,
               decoration: InputDecoration(labelText: s.t('priority'), border: border),
               items: [
                 for (final priority in const ['low', 'medium', 'high', 'urgent'])

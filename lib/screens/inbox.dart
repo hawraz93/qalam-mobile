@@ -128,7 +128,7 @@ class InboxTabState extends State<InboxTab> {
       itemBuilder: (context, item, refreshList) {
         final unread = item['read_at'] == null;
         return ListTile(
-          tileColor: unread ? brandColor.withOpacity(0.06) : null,
+          tileColor: unread ? brandColor.withValues(alpha: 0.06) : null,
           leading: Icon(_categoryIcon(item['category']?.toString()), color: unread ? brandColor : Colors.grey),
           title: Text(
             item['title']?.toString() ?? '',

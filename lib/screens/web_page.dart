@@ -54,12 +54,11 @@ class _WebPageScreenState extends State<WebPageScreen> {
       final platform = controller.platform;
       if (platform is AndroidWebViewController) {
         await platform.setOnShowFileSelector((params) async {
-          final result = await FilePicker.platform.pickFiles(
-            allowMultiple: params.mode == FileSelectorMode.openMultiple,
-          );
-          if (result == null) return [];
+          // file_picker 13 always allows several files; the page keeps the first one for a single-file input
+          final files = await FilePicker.pickFiles();
+          final picked = params.mode == FileSelectorMode.openMultiple ? files : files.take(1);
           return [
-            for (final file in result.files)
+            for (final file in picked)
               if (file.path != null) Uri.file(file.path!).toString(),
           ];
         });
