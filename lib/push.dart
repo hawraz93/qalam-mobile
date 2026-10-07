@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io' show Platform;
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'api.dart';
 
@@ -25,6 +27,16 @@ class Push {
   static bool _ready = false;
   static String? deviceToken;
 
+  /// Same id as the server sends in the FCM payload (android.notification.channel_id)
+  static const _channel = AndroidNotificationChannel(
+    'qalam_alerts',
+    'Al-Qalam alerts',
+    description: 'New tickets, complaints, messages and replies',
+    importance: Importance.high,
+  );
+
+  static final _local = FlutterLocalNotificationsPlugin();
+
   /// Fires when a push arrives while the app is open (refresh badges / lists).
   static final StreamController<RemoteMessage> foreground = StreamController.broadcast();
 
@@ -41,7 +53,33 @@ class Push {
       return;
     }
 
-    FirebaseMessaging.onMessage.listen(foreground.add);
+    // While the app is closed, Android shows FCM notifications by itself. While it is
+    // open, nothing is shown unless the app does it, so foreground messages go through
+    // flutter_local_notifications on the same channel.
+    await _local.initialize(
+      const InitializationSettings(
+        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        iOS: DarwinInitializationSettings(),
+      ),
+      onDidReceiveNotificationResponse: (response) {
+        final payload = response.payload;
+        if (payload == null || payload.isEmpty) return;
+        final target = PushTarget.fromData(Map<String, dynamic>.from(jsonDecode(payload) as Map));
+        if (target != null) opened.add(target);
+      },
+    );
+    await _local
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(_channel);
+
+    // iOS: show banners while the app is in the foreground too
+    await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    FirebaseMessaging.onMessage.listen(_showForeground);
     FirebaseMessaging.onMessageOpenedApp.listen(_handleOpen);
     FirebaseMessaging.instance.onTokenRefresh.listen(_sendToken);
   }
@@ -81,6 +119,30 @@ class Push {
     } catch (e) {
       debugPrint('Could not send device token: $e');
     }
+  }
+
+  static Future<void> _showForeground(RemoteMessage message) async {
+    foreground.add(message);
+
+    final notification = message.notification;
+    if (notification == null || !Platform.isAndroid) return;
+
+    await _local.show(
+      message.hashCode,
+      notification.title,
+      notification.body,
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          _channel.id,
+          _channel.name,
+          channelDescription: _channel.description,
+          importance: Importance.high,
+          priority: Priority.high,
+          icon: '@mipmap/ic_launcher',
+        ),
+      ),
+      payload: jsonEncode(message.data),
+    );
   }
 
   static void _handleOpen(RemoteMessage message) {

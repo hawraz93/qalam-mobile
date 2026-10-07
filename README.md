@@ -21,18 +21,22 @@ tickets they opened. It talks to the Laravel API in this repository (`routes/api
 
    `flutter create` keeps the existing `lib/` and `pubspec.yaml`. Delete the generated `test/widget_test.dart`.
 
-3. Create a Firebase project (https://console.firebase.google.com), then connect the app:
+3. Push notifications (Firebase), the short way — no Firebase CLI needed:
 
-   ```
-   dart pub global activate flutterfire_cli
-   flutterfire configure
-   ```
+   1. https://console.firebase.google.com → Add project (name: Al-Qalam).
+   2. In the project: Add app → Android → package name `iq.edu.alqalam.qalam_notify` → Register
+      → Download `google-services.json` → put it in `mobile/android/app/`.
+      The Gradle build picks it up automatically (see `android/app/build.gradle.kts`).
+   3. Project settings → Cloud Messaging → make sure "Firebase Cloud Messaging API (V1)" is enabled.
+   4. Project settings → Service accounts → Generate new private key → open the downloaded JSON,
+      copy its whole content.
+   5. On the website: Notifications settings → "Mobile App" section → paste the JSON, switch push on, save.
+   6. Rebuild the app (`flutter build apk --release`), install it, sign in, then press
+      "Send a test push to my phone" on the website.
 
-   This adds `android/app/google-services.json` and the iOS plist. Without it the app still
-   runs, but receives no push notifications.
+   Without `google-services.json` the app still builds and runs, only push is off.
 
-4. In Firebase Console → Project settings → Service accounts → **Generate new private key**.
-   Open the website → Notifications settings → "Mobile App" section, paste the JSON, enable push, save.
+4. (Optional) `flutterfire configure` does the same as step 3.2 and also sets up iOS.
 
 5. Run against the local site (Android emulator reaches the PC at `10.0.2.2`):
 
