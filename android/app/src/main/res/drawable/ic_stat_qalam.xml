@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Status-bar / notification small icon: a calligraphy pen nib (al-qalam, "the pen").
+    Android draws small icons as a white silhouette from the alpha channel only,
+    so the full-colour launcher logo showed up as a blank white shape.
+    Keep this single-colour, transparent background, no fine detail.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <group
+        android:pivotX="12"
+        android:pivotY="12"
+        android:rotation="45"
+        android:scaleX="0.86"
+        android:scaleY="0.86">
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:fillType="evenOdd"
+            android:pathData="M9.2,1.4 H14.8 V3.9 H9.2 Z M8.6,5.1 H15.4 L18.7,9.1 C19.1,9.6 19.2,10.2 18.9,10.8 L14.4,19.3 L12,22.8 L9.6,19.3 L5.1,10.8 C4.8,10.2 4.9,9.6 5.3,9.1 Z M12,9.6 C11.1,9.6 10.4,10.3 10.4,11.2 C10.4,12.1 11.1,12.8 12,12.8 C12.9,12.8 13.6,12.1 13.6,11.2 C13.6,10.3 12.9,9.6 12,9.6 Z M11.58,12.7 H12.42 V20.5 L12,21.2 L11.58,20.5 Z" />
+    </group>
+</vector>

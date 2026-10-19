@@ -5,6 +5,16 @@ const brandColor = Color(0xFF910051);
 const brandDark = Color(0xFF5E0034);
 const brandLight = Color(0xFFF7E6EF);
 
+/// Status colours for tickets, complaints and counters. Kept apart from the
+/// brand accent so "urgent" never looks like "university pink".
+class Tone {
+  static const danger = Color(0xFFD1344B);
+  static const warning = Color(0xFFE07F0A);
+  static const info = Color(0xFF2F6FDB);
+  static const success = Color(0xFF1E9A68);
+  static const neutral = Color(0xFF7D7480);
+}
+
 /// Light and dark Material 3 themes with one typeface for Kurdish, Arabic and Latin.
 class AppTheme {
   static ThemeData light() => _build(Brightness.light);
@@ -17,18 +27,22 @@ class AppTheme {
       seedColor: brandColor,
       brightness: brightness,
       primary: dark ? const Color(0xFFFFAFD0) : brandColor,
-      surface: dark ? const Color(0xFF151218) : const Color(0xFFFAF7F9),
+      surface: dark ? const Color(0xFF141116) : const Color(0xFFF6F3F5),
     );
+    final cardColor = dark ? const Color(0xFF1E1A21) : Colors.white;
+    final fieldColor = dark ? const Color(0xFF26212A) : const Color(0xFFF1ECEF);
 
     final base = ThemeData(useMaterial3: true, colorScheme: scheme, fontFamily: 'Vazirmatn');
     final text = base.textTheme.apply(fontFamily: 'Vazirmatn');
 
     return base.copyWith(
       textTheme: text.copyWith(
-        headlineSmall: text.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
-        titleLarge: text.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-        titleMedium: text.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-        bodyMedium: text.bodyMedium?.copyWith(height: 1.5),
+        headlineSmall: text.headlineSmall?.copyWith(fontWeight: FontWeight.w700, height: 1.25),
+        titleLarge: text.titleLarge?.copyWith(fontWeight: FontWeight.w700, fontSize: 20, height: 1.3),
+        titleMedium: text.titleMedium?.copyWith(fontWeight: FontWeight.w700, fontSize: 15.5),
+        titleSmall: text.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+        bodyMedium: text.bodyMedium?.copyWith(height: 1.55),
+        labelSmall: text.labelSmall?.copyWith(fontWeight: FontWeight.w600, letterSpacing: 0.1),
       ),
       scaffoldBackgroundColor: scheme.surface,
       appBarTheme: AppBarTheme(
@@ -41,17 +55,21 @@ class AppTheme {
       ),
       cardTheme: CardThemeData(
         elevation: 0,
-        color: dark ? const Color(0xFF1F1B22) : Colors.white,
+        color: cardColor,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: BorderSide(color: scheme.outlineVariant.withValues(alpha: dark ? 0.4 : 0.6)),
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: scheme.outlineVariant.withValues(alpha: dark ? 0.3 : 0.45)),
         ),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: dark ? const Color(0xFF1F1B22) : Colors.white,
-        indicatorColor: scheme.primary.withValues(alpha: dark ? 0.25 : 0.12),
-        height: 68,
+        backgroundColor: cardColor,
+        surfaceTintColor: Colors.transparent,
+        shadowColor: Colors.black.withValues(alpha: 0.08),
+        elevation: 3,
+        indicatorColor: scheme.primary.withValues(alpha: dark ? 0.22 : 0.1),
+        indicatorShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        height: 70,
         labelTextStyle: WidgetStateProperty.resolveWith(
           (states) => text.labelSmall?.copyWith(
             fontWeight: states.contains(WidgetState.selected) ? FontWeight.w700 : FontWeight.w500,
@@ -64,27 +82,33 @@ class AppTheme {
           ),
         ),
       ),
+      // Filled, borderless fields: the outline only appears on focus or error.
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: dark ? const Color(0xFF26222A) : Colors.white,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: scheme.outlineVariant),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: scheme.outlineVariant),
-        ),
+        fillColor: fieldColor,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide(color: scheme.primary, width: 1.6),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: scheme.error, width: 1.2),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: scheme.error, width: 1.6),
+        ),
+        labelStyle: TextStyle(color: scheme.onSurfaceVariant),
+        floatingLabelStyle: TextStyle(color: scheme.primary, fontWeight: FontWeight.w600),
+        prefixIconColor: scheme.onSurfaceVariant,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          minimumSize: const Size.fromHeight(50),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          minimumSize: const Size.fromHeight(52),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           textStyle: const TextStyle(fontFamily: 'Vazirmatn', fontWeight: FontWeight.w700, fontSize: 15),
         ),
       ),
@@ -120,7 +144,7 @@ class AppTheme {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: dark ? const Color(0xFF1F1B22) : Colors.white,
+        backgroundColor: cardColor,
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
         showDragHandle: true,
       ),

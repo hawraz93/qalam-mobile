@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../api.dart';
 import '../strings.dart';
 import '../widgets.dart';
 
-/// Opens a new IT ticket. Guests fill in who they are; signed-in users do not.
+/// Opens a new IT ticket in short steps: where (department), what (category),
+/// how urgent, details. Guests also say who they are; signed-in users do not.
 class TicketFormScreen extends StatefulWidget {
   const TicketFormScreen({super.key});
 
@@ -13,6 +15,17 @@ class TicketFormScreen extends StatefulWidget {
 }
 
 class _TicketFormScreenState extends State<TicketFormScreen> {
+  static const _categories = {
+    'hardware': Icons.computer_rounded,
+    'software': Icons.apps_rounded,
+    'network': Icons.wifi_rounded,
+    'account': Icons.manage_accounts_rounded,
+    'printer': Icons.print_rounded,
+    'other': Icons.help_outline_rounded,
+  };
+
+  static const _priorities = ['low', 'medium', 'high', 'urgent'];
+
   final _form = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _email = TextEditingController();
@@ -24,7 +37,20 @@ class _TicketFormScreenState extends State<TicketFormScreen> {
   bool _busy = false;
   String? _sentTicketNo;
 
+  List<Map<String, dynamic>> _departments = [];
+  Map<String, dynamic>? _department;
+  bool _departmentsLoading = true;
+  bool _departmentsFailed = false;
+  bool _departmentMissing = false;
+
   bool get _guest => !api.isSignedIn;
+
+  @override
+  void initState() {
+    super.initState();
+    _phone.text = api.user?['phone']?.toString() ?? '';
+    _loadDepartments();
+  }
 
   @override
   void dispose() {
@@ -34,8 +60,64 @@ class _TicketFormScreenState extends State<TicketFormScreen> {
     super.dispose();
   }
 
+  Future<void> _loadDepartments() async {
+    setState(() {
+      _departmentsLoading = true;
+      _departmentsFailed = false;
+    });
+    try {
+      final rows = await api.departments();
+      if (!mounted) return;
+      final own = api.user?['department_id'];
+      setState(() {
+        _departments = rows;
+        // Most tickets are about the sender's own department: start there.
+        _department ??= rows.where((d) => d['id'] == own).firstOrNull;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _departmentsFailed = true);
+    } finally {
+      if (mounted) setState(() => _departmentsLoading = false);
+    }
+  }
+
+  Future<void> _pickDepartment() async {
+    if (_departmentsFailed) return _loadDepartments();
+    final s = S.of(context);
+    final picked = await showPickerSheet(
+      context,
+      title: s.t('choose_department'),
+      load: (search) async {
+        final q = _normalize(search.trim());
+        if (q.isEmpty) return _departments;
+        return _departments.where((d) => _normalize('${d['name']} ${d['description']}').contains(q)).toList();
+      },
+      label: (row) => row['name']?.toString() ?? '',
+      sublabel: (row) => row['description']?.toString() ?? '',
+    );
+    if (picked != null) {
+      setState(() {
+        _department = picked;
+        _departmentMissing = false;
+      });
+    }
+  }
+
+  /// Department names are written in Arabic; Kurdish keyboards type ک / ی / ە.
+  /// Folding the letter variants lets either spelling find the department.
+  static String _normalize(String text) {
+    const folds = {'ك': 'ک', 'ي': 'ی', 'ى': 'ی', 'ة': 'ه', 'ە': 'ه', 'أ': 'ا', 'إ': 'ا', 'آ': 'ا', 'ؤ': 'و'};
+    final buffer = StringBuffer();
+    for (final char in text.toLowerCase().characters) {
+      buffer.write(folds[char] ?? char);
+    }
+    return buffer.toString();
+  }
+
   Future<void> _submit() async {
-    if (!_form.currentState!.validate()) return;
+    final fieldsOk = _form.currentState!.validate();
+    setState(() => _departmentMissing = _department == null);
+    if (!fieldsOk || _department == null) return;
 
     setState(() => _busy = true);
     try {
@@ -43,6 +125,7 @@ class _TicketFormScreenState extends State<TicketFormScreen> {
         if (_guest) 'requester_name': _name.text.trim(),
         if (_guest) 'requester_email': _email.text.trim(),
         if (_phone.text.trim().isNotEmpty) 'requester_phone': _phone.text.trim(),
+        'department_id': _department!['id'],
         'category': _category,
         'priority': _priority,
         'title': _title.text.trim(),
@@ -63,33 +146,9 @@ class _TicketFormScreenState extends State<TicketFormScreen> {
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
-    const border = OutlineInputBorder();
 
     if (_sentTicketNo != null) {
-      return Scaffold(
-        appBar: AppBar(title: Text(s.t('new_ticket'))),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.check_circle, size: 72, color: Colors.green),
-                const SizedBox(height: 16),
-                Text(s.t('ticket_sent'), textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                SelectableText(_sentTicketNo!, style: Theme.of(context).textTheme.headlineSmall),
-                if (_guest) ...[
-                  const SizedBox(height: 12),
-                  Text(s.t('ticket_sent_guest'), textAlign: TextAlign.center),
-                ],
-                const SizedBox(height: 24),
-                FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('OK')),
-              ],
-            ),
-          ),
-        ),
-      );
+      return _SentScreen(ticketNo: _sentTicketNo!, guest: _guest);
     }
 
     return Scaffold(
@@ -97,74 +156,204 @@ class _TicketFormScreenState extends State<TicketFormScreen> {
       body: Form(
         key: _form,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
           children: [
             if (_guest) ...[
-              TextFormField(
-                controller: _name,
-                decoration: InputDecoration(labelText: s.t('your_name'), border: border),
-                validator: _required,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _email,
-                textDirection: TextDirection.ltr,
-                keyboardType: TextInputType.emailAddress,
-                decoration: InputDecoration(labelText: s.t('email'), border: border),
-                validator: (value) => (value ?? '').contains('@') ? null : s.t('required'),
+              FieldGroup(
+                title: s.t('your_details'),
+                icon: Icons.person_outline_rounded,
+                children: [
+                  TextFormField(
+                    controller: _name,
+                    decoration:
+                        InputDecoration(labelText: s.t('your_name'), prefixIcon: const Icon(Icons.badge_outlined)),
+                    validator: _required,
+                  ),
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    controller: _email,
+                    textDirection: TextDirection.ltr,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: InputDecoration(labelText: s.t('email'), prefixIcon: const Icon(Icons.alternate_email)),
+                    validator: (value) => (value ?? '').contains('@') ? null : s.t('required'),
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
             ],
-            TextFormField(
-              controller: _phone,
-              textDirection: TextDirection.ltr,
-              keyboardType: TextInputType.phone,
-              decoration: InputDecoration(labelText: s.t('phone'), border: border),
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: _category,
-              decoration: InputDecoration(labelText: s.t('category'), border: border),
-              items: [
-                for (final category in const ['hardware', 'software', 'network', 'account', 'printer', 'other'])
-                  DropdownMenuItem(value: category, child: Text(s.t('cat_$category'))),
+            FieldGroup(
+              title: s.t('ticket_where'),
+              hint: s.t('ticket_where_hint'),
+              icon: Icons.location_on_outlined,
+              children: [
+                PickerField(
+                  label: _departmentsFailed ? s.t('departments_failed') : s.t('choose_department'),
+                  icon: Icons.account_tree_outlined,
+                  value: _department?['name']?.toString(),
+                  detail: _department?['description']?.toString(),
+                  loading: _departmentsLoading,
+                  errorText: _departmentMissing ? s.t('required') : null,
+                  onTap: _departmentsLoading ? null : _pickDepartment,
+                ),
               ],
-              onChanged: (value) => setState(() => _category = value ?? _category),
             ),
             const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: _priority,
-              decoration: InputDecoration(labelText: s.t('priority'), border: border),
-              items: [
-                for (final priority in const ['low', 'medium', 'high', 'urgent'])
-                  DropdownMenuItem(value: priority, child: Text(s.t(priority))),
+            FieldGroup(
+              title: s.t('ticket_what'),
+              icon: Icons.category_outlined,
+              children: [
+                ColumnsWrap(
+                  columns: 3,
+                  spacing: 8,
+                  children: [
+                    for (final entry in _categories.entries)
+                      ChoiceTile(
+                        icon: entry.value,
+                        label: s.t('cat_${entry.key}'),
+                        selected: _category == entry.key,
+                        onTap: () => setState(() => _category = entry.key),
+                      ),
+                  ],
+                ),
               ],
-              onChanged: (value) => setState(() => _priority = value ?? _priority),
             ),
             const SizedBox(height: 12),
-            TextFormField(
-              controller: _title,
-              decoration: InputDecoration(labelText: s.t('ticket_title'), border: border),
-              validator: (value) => _required(value, min: 4),
+            FieldGroup(
+              title: s.t('ticket_urgency'),
+              icon: Icons.speed_rounded,
+              children: [
+                Row(
+                  children: [
+                    for (final priority in _priorities) ...[
+                      if (priority != _priorities.first) const SizedBox(width: 8),
+                      Expanded(
+                        child: ChoiceTile(
+                          label: s.t(priority),
+                          color: priorityColor(priority),
+                          selected: _priority == priority,
+                          onTap: () => setState(() => _priority = priority),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
             ),
             const SizedBox(height: 12),
-            TextFormField(
-              controller: _description,
-              minLines: 4,
-              maxLines: 10,
-              decoration: InputDecoration(labelText: s.t('ticket_description'), border: border),
-              validator: (value) => _required(value, min: 10),
-            ),
-            const SizedBox(height: 20),
-            FilledButton.icon(
-              onPressed: _busy ? null : _submit,
-              icon: const Icon(Icons.send),
-              label: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Text(s.t('send_ticket')),
-              ),
+            FieldGroup(
+              title: s.t('ticket_details'),
+              icon: Icons.edit_note_rounded,
+              children: [
+                TextFormField(
+                  controller: _title,
+                  textInputAction: TextInputAction.next,
+                  decoration: InputDecoration(labelText: s.t('ticket_title')),
+                  validator: (value) => _required(value, min: 4),
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _description,
+                  minLines: 4,
+                  maxLines: 10,
+                  decoration: InputDecoration(labelText: s.t('ticket_description'), alignLabelWithHint: true),
+                  validator: (value) => _required(value, min: 10),
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _phone,
+                  textDirection: TextDirection.ltr,
+                  keyboardType: TextInputType.phone,
+                  decoration:
+                      InputDecoration(labelText: s.t('ticket_contact'), prefixIcon: const Icon(Icons.phone_outlined)),
+                ),
+              ],
             ),
           ],
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          child: FilledButton.icon(
+            onPressed: _busy ? null : _submit,
+            icon: _busy
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.send_rounded),
+            label: Text(s.t('send_ticket')),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Confirmation after sending: the ticket number, easy to copy and quote later.
+class _SentScreen extends StatelessWidget {
+  const _SentScreen({required this.ticketNo, required this.guest});
+
+  final String ticketNo;
+  final bool guest;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    final scheme = Theme.of(context).colorScheme;
+
+    return Scaffold(
+      appBar: AppBar(automaticallyImplyLeading: false),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 96,
+                height: 96,
+                decoration: BoxDecoration(color: Tone.success.withValues(alpha: 0.12), shape: BoxShape.circle),
+                child: const Icon(Icons.check_rounded, size: 52, color: Tone.success),
+              ),
+              const SizedBox(height: 20),
+              Text(s.t('ticket_sent'), textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 18),
+              Text(s.t('ticket_no'), style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5)),
+              const SizedBox(height: 6),
+              Material(
+                color: scheme.primary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(14),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: ticketNo));
+                    toast(context, s.t('copied'));
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          ticketNo,
+                          textDirection: TextDirection.ltr,
+                          style: TextStyle(
+                              fontSize: 20, fontWeight: FontWeight.w700, color: scheme.primary, letterSpacing: 0.5),
+                        ),
+                        const SizedBox(width: 10),
+                        Icon(Icons.copy_rounded, size: 18, color: scheme.primary),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              if (guest) ...[
+                const SizedBox(height: 16),
+                Text(s.t('ticket_sent_guest'),
+                    textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant, height: 1.6)),
+              ],
+              const SizedBox(height: 28),
+              FilledButton(onPressed: () => Navigator.of(context).pop(true), child: Text(s.t('done'))),
+            ],
+          ),
         ),
       ),
     );

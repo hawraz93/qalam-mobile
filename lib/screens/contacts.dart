@@ -78,23 +78,29 @@ class ContactDetailScreen extends StatelessWidget {
           final replied = contact['replied_at'] != null;
 
           return ListView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
             children: [
-              Text(contact['name']?.toString() ?? '', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 8),
-              Wrap(spacing: 6, children: [
-                Pill(contact['subject_display']?.toString() ?? ''),
-                Pill(shortDate(contact['created_at'])),
-                if (replied) Pill(s.t('mark_replied'), color: Colors.green.shade700),
-              ]),
+              DetailHeader(
+                pills: [
+                  if ((contact['subject_display'] ?? '').toString().isNotEmpty) Pill(contact['subject_display'].toString()),
+                  if (replied) Pill(s.t('mark_replied'), color: Tone.success, icon: Icons.done_all),
+                ],
+                title: contact['name']?.toString(),
+                body: contact['message']?.toString(),
+                meta: shortDate(contact['created_at']),
+              ),
               const SizedBox(height: 12),
-              InfoRow(s.t('email'), contact['email']),
-              InfoRow(s.t('phone'), contact['phone']),
-              const Divider(height: 32),
-              SelectableText(contact['message']?.toString() ?? '', style: const TextStyle(fontSize: 15, height: 1.6)),
-              const SizedBox(height: 24),
-              if (!replied)
-                OutlinedButton.icon(
+              FieldGroup(
+                title: s.t('contact_details'),
+                icon: Icons.contact_mail_outlined,
+                children: [
+                  InfoRow(s.t('email'), contact['email'], icon: Icons.alternate_email),
+                  InfoRow(s.t('phone'), contact['phone'], icon: Icons.phone_outlined),
+                ],
+              ),
+              if (!replied) ...[
+                const SizedBox(height: 16),
+                FilledButton.tonalIcon(
                   onPressed: () async {
                     try {
                       await api.post('/contacts/$id/replied');
@@ -106,6 +112,7 @@ class ContactDetailScreen extends StatelessWidget {
                   icon: const Icon(Icons.done_all),
                   label: Text(s.t('mark_replied')),
                 ),
+              ],
             ],
           );
         },

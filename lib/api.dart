@@ -1,7 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
+import 'package:http/http.dart' as http;
+
+import 'strings.dart';
 
 class ApiException implements Exception {
   ApiException(this.status, this.message);
@@ -27,10 +29,26 @@ class Api {
   String? _token;
   Map<String, dynamic>? user;
 
+  /// Swapped for a fake in the screenshot tests (test/screens_test.dart).
+  http.Client client = http.Client();
+
+  /// Signs in without the server or the keychain, for the screenshot tests.
+  void signInForPreview(Map<String, dynamic> profile) {
+    _token = 'preview';
+    user = profile;
+  }
+
   /// Called when the server says the token is no longer valid.
   void Function()? onSignedOut;
 
   bool get isSignedIn => _token != null && user != null;
+
+  /// Sent with every request: the server requires a department on tickets from
+  /// 1.5.0 on and answers the department list in the app's language.
+  Map<String, String> get _clientHeaders => {
+        'X-App-Version': S.appVersion,
+        'Accept-Language': S.current,
+      };
 
   /// For widgets that fetch protected files themselves (Image.network).
   Map<String, String> get authHeaders => {
@@ -85,16 +103,31 @@ class Api {
           Map<String, dynamic>.from(link as Map),
       ];
 
+  Map<String, dynamic>? _config;
+
+  /// Public settings (/config): ticket rules, departments, latest APK. Cached
+  /// for the app run; [fresh] asks the server again.
+  Future<Map<String, dynamic>> config({bool fresh = false}) async {
+    if (_config != null && !fresh) return _config!;
+    final body = await get('/config');
+    return _config = Map<String, dynamic>.from(body as Map);
+  }
+
   /// True when an admin requires signing in before a ticket can be opened.
   /// Asked from the server each time; if it cannot be reached the form is still
   /// offered and the server has the final say.
   Future<bool> ticketsRequireLogin() async {
     try {
-      final body = await get('/config');
-      return body['tickets_require_login'] == true;
+      return (await config(fresh: true))['tickets_require_login'] == true;
     } catch (_) {
       return false;
     }
+  }
+
+  /// Every active department with its parent path, for the ticket form.
+  Future<List<Map<String, dynamic>>> departments() async {
+    final rows = (await config())['departments'] as List? ?? [];
+    return rows.map((row) => Map<String, dynamic>.from(row as Map)).toList();
   }
 
   /// Restores a saved session. Returns false when the user must sign in.
@@ -160,6 +193,7 @@ class Api {
   Future<dynamic> upload(String path, String field, String filePath, {Map<String, String> fields = const {}}) async {
     final request = http.MultipartRequest('POST', Uri.parse('$baseUrl$path'))
       ..headers['Accept'] = 'application/json'
+      ..headers.addAll(_clientHeaders)
       ..fields.addAll(fields);
     if (_token != null) {
       request.headers['Authorization'] = 'Bearer $_token';
@@ -168,7 +202,7 @@ class Api {
 
     final http.Response response;
     try {
-      response = await http.Response.fromStream(await request.send().timeout(const Duration(seconds: 90)));
+      response = await http.Response.fromStream(await client.send(request).timeout(const Duration(seconds: 90)));
     } catch (_) {
       throw ApiException(0, 'network');
     }
@@ -187,6 +221,7 @@ class Api {
 
     final request = http.Request(method, uri)
       ..headers['Accept'] = 'application/json'
+      ..headers.addAll(_clientHeaders)
       ..headers['Content-Type'] = 'application/json';
 
     if (_token != null) {
@@ -199,7 +234,7 @@ class Api {
     final http.Response response;
     try {
       response = await http.Response.fromStream(
-        await request.send().timeout(const Duration(seconds: 20)),
+        await client.send(request).timeout(const Duration(seconds: 20)),
       );
     } catch (_) {
       throw ApiException(0, 'network');

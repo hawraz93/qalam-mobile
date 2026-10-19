@@ -156,20 +156,15 @@ class _TicketHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(ticket['title']?.toString() ?? '', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 8),
-        Wrap(spacing: 6, children: [
-          Pill(ticket['ticket_no']?.toString() ?? ''),
-          Pill(s.t(ticket['status']?.toString() ?? ''), color: statusColor(ticket['status']?.toString())),
-          Pill(s.t(ticket['priority']?.toString() ?? ''), color: priorityColor(ticket['priority']?.toString())),
-        ]),
-        const SizedBox(height: 12),
-        SelectableText(ticket['description']?.toString() ?? '', style: const TextStyle(fontSize: 15, height: 1.6)),
-        const Divider(height: 32),
+    return DetailHeader(
+      pills: [
+        Pill(ticket['ticket_no']?.toString() ?? ''),
+        Pill(s.t(ticket['status']?.toString() ?? ''), color: statusColor(ticket['status']?.toString())),
+        Pill(s.t(ticket['priority']?.toString() ?? ''), color: priorityColor(ticket['priority']?.toString())),
       ],
+      title: ticket['title']?.toString(),
+      body: ticket['description']?.toString(),
+      meta: shortDate(ticket['created_at']),
     );
   }
 }
@@ -182,42 +177,46 @@ class _MyTicketBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
+    final scheme = Theme.of(context).colorScheme;
     final updates = (ticket['updates'] as List? ?? []).map((u) => Map<String, dynamic>.from(u as Map)).toList();
+    final hasInfo = [ticket['department_name'], ticket['assignee'], ticket['it_notes']]
+        .any((v) => v != null && v.toString().isNotEmpty);
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
       children: [
         _TicketHeader(ticket: ticket),
-        InfoRow(s.t('assignee'), ticket['assignee']),
-        InfoRow(s.t('it_notes'), ticket['it_notes']),
-        const SizedBox(height: 16),
-        Text(s.t('updates'), style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
-        if (updates.isEmpty) Text(s.t('no_updates'), style: TextStyle(color: Colors.grey.shade600)),
-        for (final update in updates)
-          Card(
-            margin: const EdgeInsets.only(bottom: 8),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(children: [
-                    Icon(update['kind'] == 'reply' ? Icons.reply : Icons.sync, size: 16, color: brandColor),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(update['title']?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w700)),
-                    ),
-                  ]),
-                  const SizedBox(height: 6),
-                  SelectableText((update['reply_message'] ?? update['body'] ?? '').toString(),
-                      style: const TextStyle(height: 1.5)),
-                  const SizedBox(height: 6),
-                  Text(shortDate(update['created_at']), style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-                ],
-              ),
-            ),
+        if (hasInfo) ...[
+          const SizedBox(height: 12),
+          FieldGroup(
+            title: s.t('it_team'),
+            icon: Icons.support_agent_rounded,
+            children: [
+              InfoRow(s.t('department'), ticket['department_name'], icon: Icons.account_tree_outlined),
+              InfoRow(s.t('assignee'), ticket['assignee'], icon: Icons.person_outline),
+              InfoRow(s.t('it_notes'), ticket['it_notes'], icon: Icons.sticky_note_2_outlined),
+            ],
           ),
+        ],
+        const SizedBox(height: 12),
+        FieldGroup(
+          title: s.t('updates'),
+          icon: Icons.history_rounded,
+          children: [
+            if (updates.isEmpty)
+              Text(s.t('no_updates'), style: TextStyle(color: scheme.onSurfaceVariant))
+            else
+              for (var i = 0; i < updates.length; i++)
+                TimelineEntry(
+                  icon: updates[i]['kind'] == 'reply' ? Icons.reply_rounded : Icons.sync_rounded,
+                  color: updates[i]['kind'] == 'reply' ? scheme.primary : Tone.info,
+                  title: updates[i]['title']?.toString() ?? '',
+                  text: (updates[i]['reply_message'] ?? updates[i]['body'] ?? '').toString(),
+                  date: relativeDate(context, updates[i]['created_at']),
+                  last: i == updates.length - 1,
+                ),
+          ],
+        ),
       ],
     );
   }
@@ -267,70 +266,89 @@ class _AdminTicketBodyState extends State<_AdminTicketBody> {
     final id = ticket['id'];
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
       children: [
         _TicketHeader(ticket: ticket),
-        InfoRow(s.t('requester'), ticket['requester_name']),
-        InfoRow(s.t('department'), ticket['department_name']),
-        InfoRow(s.t('email'), ticket['requester_email']),
-        InfoRow(s.t('phone'), ticket['requester_phone']),
-        InfoRow(s.t('assignee'), ticket['assignee']),
-        Align(
-          alignment: AlignmentDirectional.centerStart,
-          child: TextButton.icon(
-            onPressed: _busy ? null : () => _run(() => api.post('/tickets/$id/assign'), 'saved'),
-            icon: const Icon(Icons.person_add_alt),
-            label: Text(s.t('assign_me')),
-          ),
-        ),
-        const Divider(height: 32),
-        DropdownButtonFormField<String>(
-          initialValue: _status,
-          decoration: InputDecoration(labelText: s.t('status'), border: const OutlineInputBorder()),
-          items: [
-            for (final status in const ['open', 'in_progress', 'resolved', 'closed'])
-              DropdownMenuItem(value: status, child: Text(s.t(status))),
+        const SizedBox(height: 12),
+        FieldGroup(
+          title: s.t('requester'),
+          icon: Icons.person_outline_rounded,
+          children: [
+            InfoRow(s.t('name'), ticket['requester_name'], icon: Icons.badge_outlined),
+            InfoRow(s.t('department'), ticket['department_name'], icon: Icons.account_tree_outlined),
+            InfoRow(s.t('email'), ticket['requester_email'], icon: Icons.alternate_email),
+            InfoRow(s.t('phone'), ticket['requester_phone'], icon: Icons.phone_outlined),
+            const Divider(height: 20),
+            Row(
+              children: [
+                Expanded(child: InfoRow(s.t('assignee'), ticket['assignee'] ?? '—', icon: Icons.engineering_outlined)),
+                FilledButton.tonalIcon(
+                  style: FilledButton.styleFrom(minimumSize: const Size(0, 40)),
+                  onPressed: _busy ? null : () => _run(() => api.post('/tickets/$id/assign'), 'saved'),
+                  icon: const Icon(Icons.person_add_alt, size: 18),
+                  label: Text(s.t('assign_me')),
+                ),
+              ],
+            ),
           ],
-          onChanged: (value) => setState(() => _status = value ?? _status),
         ),
         const SizedBox(height: 12),
-        TextField(
-          controller: _notes,
-          minLines: 2,
-          maxLines: 5,
-          decoration: InputDecoration(labelText: s.t('it_notes'), border: const OutlineInputBorder()),
-        ),
-        const SizedBox(height: 8),
-        FilledButton(
-          onPressed: _busy
-              ? null
-              : () => _run(
-                    () => api.patch('/tickets/$id', {'status': _status, 'it_notes': _notes.text}),
-                    'saved',
+        FieldGroup(
+          title: s.t('status'),
+          icon: Icons.flag_outlined,
+          children: [
+            ColumnsWrap(
+              columns: 2,
+              spacing: 8,
+              children: [
+                for (final status in const ['open', 'in_progress', 'resolved', 'closed'])
+                  ChoiceTile(
+                    label: s.t(status),
+                    color: statusColor(status),
+                    selected: _status == status,
+                    onTap: () => setState(() => _status = status),
                   ),
-          child: Text(s.t('save')),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _notes,
+              minLines: 2,
+              maxLines: 5,
+              decoration: InputDecoration(labelText: s.t('it_notes'), alignLabelWithHint: true),
+            ),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: _busy
+                  ? null
+                  : () => _run(() => api.patch('/tickets/$id', {'status': _status, 'it_notes': _notes.text}), 'saved'),
+              child: Text(s.t('save')),
+            ),
+          ],
         ),
-        const Divider(height: 32),
-        TextField(
-          controller: _reply,
-          minLines: 3,
-          maxLines: 8,
-          decoration: InputDecoration(
-            labelText: s.t('reply'),
-            hintText: s.t('reply_hint'),
-            border: const OutlineInputBorder(),
-          ),
-        ),
-        const SizedBox(height: 8),
-        FilledButton.icon(
-          onPressed: _busy
-              ? null
-              : () {
-                  if (_reply.text.trim().length < 5) return;
-                  _run(() => api.post('/tickets/$id/reply', {'message': _reply.text.trim()}), 'reply_sent');
-                },
-          icon: const Icon(Icons.send),
-          label: Text(s.t('send_reply')),
+        const SizedBox(height: 12),
+        FieldGroup(
+          title: s.t('reply'),
+          icon: Icons.reply_rounded,
+          children: [
+            TextField(
+              controller: _reply,
+              minLines: 3,
+              maxLines: 8,
+              decoration: InputDecoration(hintText: s.t('reply_hint')),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: _busy
+                  ? null
+                  : () {
+                      if (_reply.text.trim().length < 5) return;
+                      _run(() => api.post('/tickets/$id/reply', {'message': _reply.text.trim()}), 'reply_sent');
+                    },
+              icon: const Icon(Icons.send_rounded),
+              label: Text(s.t('send_reply')),
+            ),
+          ],
         ),
       ],
     );

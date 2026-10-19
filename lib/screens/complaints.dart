@@ -119,6 +119,7 @@ class _ComplaintBodyState extends State<_ComplaintBody> {
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
+    final scheme = Theme.of(context).colorScheme;
     final complaint = widget.complaint;
     final id = complaint['id'];
     final resolved = complaint['is_resolved'] == true;
@@ -126,97 +127,109 @@ class _ComplaintBodyState extends State<_ComplaintBody> {
     final evidence = (complaint['evidence'] as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
       children: [
-        Wrap(spacing: 6, children: [
-          Pill(complaint['reference']?.toString() ?? ''),
-          Pill(s.t(complaint['priority']?.toString() ?? ''), color: priorityColor(complaint['priority']?.toString())),
-          Pill(s.t(resolved ? 'resolved' : 'open'), color: resolved ? Colors.green.shade700 : Colors.red.shade700),
-        ]),
+        DetailHeader(
+          pills: [
+            Pill(complaint['reference']?.toString() ?? ''),
+            Pill(s.t(complaint['priority']?.toString() ?? ''), color: priorityColor(complaint['priority']?.toString())),
+            Pill(s.t(resolved ? 'resolved' : 'open'), color: statusColor(resolved ? 'resolved' : 'open')),
+          ],
+          body: complaint['description']?.toString(),
+          meta: shortDate(complaint['created_at']),
+        ),
         const SizedBox(height: 12),
-        SelectableText(complaint['description']?.toString() ?? '', style: const TextStyle(fontSize: 15, height: 1.6)),
-        const Divider(height: 32),
-        InfoRow(s.t('requester'), complaint['name'] ?? s.t('anonymous')),
-        InfoRow(s.t('phone'), complaint['phone']),
-        InfoRow(s.t('email'), complaint['email']),
+        FieldGroup(
+          title: s.t('requester'),
+          icon: Icons.person_outline_rounded,
+          children: [
+            InfoRow(s.t('name'), complaint['name'] ?? s.t('anonymous'), icon: Icons.badge_outlined),
+            InfoRow(s.t('phone'), complaint['phone'], icon: Icons.phone_outlined),
+            InfoRow(s.t('email'), complaint['email'], icon: Icons.alternate_email),
+          ],
+        ),
         if (evidence.isNotEmpty) ...[
           const SizedBox(height: 12),
-          Text(s.t('attachments'), style: Theme.of(context).textTheme.titleSmall),
-          for (final file in evidence)
-            file['is_image'] == true
-                ? Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.network(
-                        file['url'].toString(),
-                        headers: api.authHeaders,
-                        errorBuilder: (_, __, ___) => Text(file['filename'].toString()),
+          FieldGroup(
+            title: s.t('attachments'),
+            icon: Icons.attach_file_rounded,
+            children: [
+              for (final file in evidence)
+                file['is_image'] == true
+                    ? Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.network(
+                            file['url'].toString(),
+                            headers: api.authHeaders,
+                            errorBuilder: (_, __, ___) => Text(file['filename'].toString()),
+                          ),
+                        ),
+                      )
+                    : Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(children: [
+                          Icon(Icons.description_outlined, size: 18, color: scheme.onSurfaceVariant),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(file['filename'].toString(), style: const TextStyle(fontSize: 13))),
+                        ]),
                       ),
-                    ),
-                  )
-                : Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Row(children: [
-                      const Icon(Icons.attach_file, size: 16),
-                      const SizedBox(width: 6),
-                      Expanded(child: Text(file['filename'].toString(), style: const TextStyle(fontSize: 12))),
-                    ]),
-                  ),
+            ],
+          ),
         ],
-        const Divider(height: 32),
-        TextField(
-          controller: _notes,
-          minLines: 2,
-          maxLines: 5,
-          decoration: InputDecoration(labelText: s.t('admin_notes'), border: const OutlineInputBorder()),
-        ),
-        const SizedBox(height: 8),
-        Row(children: [
-          Expanded(
-            child: OutlinedButton(
-              onPressed: _busy
-                  ? null
-                  : () => _run(() => api.patch('/complaints/$id', {'admin_notes': _notes.text}), 'saved'),
+        const SizedBox(height: 12),
+        FieldGroup(
+          title: s.t('follow_up'),
+          icon: Icons.fact_check_outlined,
+          children: [
+            TextField(
+              controller: _notes,
+              minLines: 2,
+              maxLines: 5,
+              decoration: InputDecoration(labelText: s.t('admin_notes'), alignLabelWithHint: true),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton(
+              onPressed: _busy ? null : () => _run(() => api.patch('/complaints/$id', {'admin_notes': _notes.text}), 'saved'),
               child: Text(s.t('save')),
             ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: FilledButton(
-              onPressed: _busy
-                  ? null
-                  : () => _run(() => api.patch('/complaints/$id', {'is_resolved': !resolved}), 'saved'),
-              child: Text(s.t(resolved ? 'reopen' : 'resolve')),
+            const SizedBox(height: 8),
+            FilledButton.icon(
+              onPressed: _busy ? null : () => _run(() => api.patch('/complaints/$id', {'is_resolved': !resolved}), 'saved'),
+              icon: Icon(resolved ? Icons.replay_rounded : Icons.check_rounded),
+              label: Text(s.t(resolved ? 'reopen' : 'resolve')),
             ),
-          ),
-        ]),
-        const Divider(height: 32),
-        if (!canReply)
-          Text(s.t('no_email'), style: TextStyle(color: Colors.grey.shade600))
-        else ...[
-          TextField(
-            controller: _reply,
-            minLines: 3,
-            maxLines: 8,
-            decoration: InputDecoration(
-              labelText: s.t('reply'),
-              hintText: s.t('reply_hint'),
-              border: const OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 8),
-          FilledButton.icon(
-            onPressed: _busy
-                ? null
-                : () {
-                    if (_reply.text.trim().length < 5) return;
-                    _run(() => api.post('/complaints/$id/reply', {'message': _reply.text.trim()}), 'reply_sent');
-                  },
-            icon: const Icon(Icons.send),
-            label: Text(s.t('send_reply')),
-          ),
-        ],
+          ],
+        ),
+        const SizedBox(height: 12),
+        FieldGroup(
+          title: s.t('reply'),
+          icon: Icons.reply_rounded,
+          children: [
+            if (!canReply)
+              Text(s.t('no_email'), style: TextStyle(color: scheme.onSurfaceVariant))
+            else ...[
+              TextField(
+                controller: _reply,
+                minLines: 3,
+                maxLines: 8,
+                decoration: InputDecoration(hintText: s.t('reply_hint')),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: _busy
+                    ? null
+                    : () {
+                        if (_reply.text.trim().length < 5) return;
+                        _run(() => api.post('/complaints/$id/reply', {'message': _reply.text.trim()}), 'reply_sent');
+                      },
+                icon: const Icon(Icons.send_rounded),
+                label: Text(s.t('send_reply')),
+              ),
+            ],
+          ],
+        ),
       ],
     );
   }

@@ -81,6 +81,9 @@ class Push {
 
   static final _local = FlutterLocalNotificationsPlugin();
 
+  /// Brand colour for the notification icon and header (same as res/values/colors.xml).
+  static const _accent = Color(0xFF910051);
+
   /// Fires when a push arrives while the app is open (refresh badges / lists).
   static final StreamController<RemoteMessage> foreground = StreamController.broadcast();
 
@@ -102,7 +105,9 @@ class Push {
     // flutter_local_notifications on the same channel.
     await _local.initialize(
       const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        // Monochrome pen nib (res/drawable/ic_stat_qalam.xml): Android only draws the
+        // alpha channel of a small icon, so the colour logo came out as a white blank.
+        android: AndroidInitializationSettings('@drawable/ic_stat_qalam'),
         iOS: DarwinInitializationSettings(),
       ),
       onDidReceiveNotificationResponse: (response) {
@@ -234,7 +239,8 @@ class Push {
           priority: Priority.high,
           playSound: true,
           enableVibration: true,
-          icon: '@mipmap/ic_launcher',
+          icon: '@drawable/ic_stat_qalam',
+          color: _accent,
         ),
       ),
     );
@@ -301,7 +307,8 @@ class Push {
           priority: Priority.high,
           playSound: true,
           enableVibration: true,
-          icon: '@mipmap/ic_launcher',
+          icon: '@drawable/ic_stat_qalam',
+          color: _accent,
         ),
       ),
       payload: jsonEncode(message.data),

@@ -51,3 +51,6 @@ app.*.map.json
 /android/key.properties
 *.jks
 *.keystore
+
+# Design screenshots from test/screens_test.dart
+/test/screenshots/

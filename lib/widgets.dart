@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'api.dart';
 import 'strings.dart';
 
-export 'theme.dart' show brandColor;
+import 'theme.dart';
+
+export 'theme.dart' show brandColor, Tone;
 
 String errorText(BuildContext context, Object error) {
   if (error is ApiException && error.status == 0) return S.of(context).t('network');
@@ -42,26 +44,27 @@ String relativeDate(BuildContext context, dynamic iso) {
 Color priorityColor(String? priority) {
   switch (priority) {
     case 'urgent':
-      return const Color(0xFFD32F2F);
+      return Tone.danger;
     case 'high':
-      return const Color(0xFFEF6C00);
+      return Tone.warning;
     case 'medium':
-      return const Color(0xFF1976D2);
+      return Tone.info;
     default:
-      return const Color(0xFF757575);
+      return Tone.neutral;
   }
 }
 
+/// Open is "new, not started" (blue), not an alarm; urgency is shown by the priority pill.
 Color statusColor(String? status) {
   switch (status) {
     case 'open':
-      return const Color(0xFFD32F2F);
+      return Tone.info;
     case 'in_progress':
-      return const Color(0xFFEF6C00);
+      return Tone.warning;
     case 'resolved':
-      return const Color(0xFF2E7D32);
+      return Tone.success;
     default:
-      return const Color(0xFF757575);
+      return Tone.neutral;
   }
 }
 
@@ -205,7 +208,8 @@ class Avatar extends StatelessWidget {
   }
 }
 
-/// One row in a list: icon bubble, title, subtitle, chips, chevron. Unread rows get a brand accent.
+/// One row in a list: tinted icon, title, subtitle, chips, time. Unread rows get
+/// a bolder title, a tinted icon and a dot next to the time.
 class ItemCard extends StatelessWidget {
   const ItemCard({
     super.key,
@@ -232,31 +236,30 @@ class ItemCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final color = accent ?? scheme.primary;
+    final iconColor = unread ? color : scheme.onSurfaceVariant;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Card(
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,
-          child: Row(
-            children: [
-              Container(width: 4, height: 84, color: unread ? color : Colors.transparent),
-              Padding(
-                padding: const EdgeInsetsDirectional.only(start: 10),
-                child: Container(
-                  width: 42,
-                  height: 42,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
-                    color: (unread ? color : scheme.onSurfaceVariant).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(13),
+                    color: iconColor.withValues(alpha: unread ? 0.13 : 0.08),
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                  child: Icon(icon, color: unread ? color : scheme.onSurfaceVariant, size: 22),
+                  child: Icon(icon, color: iconColor, size: 22),
                 ),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                const SizedBox(width: 12),
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
@@ -271,14 +274,39 @@ class ItemCard extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontSize: 14.5,
-                                height: 1.35,
+                                height: 1.4,
+                                color: scheme.onSurface,
                                 fontWeight: unread ? FontWeight.w700 : FontWeight.w600,
                               ),
                             ),
                           ),
-                          if (trailing != null) ...[
-                            const SizedBox(width: 8),
-                            Text(trailing!, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+                          if (trailing != null || unread) ...[
+                            const SizedBox(width: 10),
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (trailing != null)
+                                    Text(
+                                      trailing!,
+                                      style: TextStyle(
+                                        fontSize: 11.5,
+                                        color: unread ? color : scheme.onSurfaceVariant,
+                                        fontWeight: unread ? FontWeight.w700 : FontWeight.w500,
+                                      ),
+                                    ),
+                                  if (unread) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
                           ],
                         ],
                       ),
@@ -288,22 +316,18 @@ class ItemCard extends StatelessWidget {
                           subtitle!,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant, height: 1.4),
+                          style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant, height: 1.45),
                         ),
                       ],
                       if (chips.isNotEmpty) ...[
-                        const SizedBox(height: 7),
+                        const SizedBox(height: 8),
                         Wrap(spacing: 6, runSpacing: 4, children: chips),
                       ],
                     ],
                   ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsetsDirectional.only(end: 8),
-                child: Icon(Icons.chevron_right, color: scheme.outline, textDirection: textDirectionFor(context)),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -315,9 +339,9 @@ class ItemCard extends StatelessWidget {
 TextDirection textDirectionFor(BuildContext context) =>
     Directionality.of(context) == TextDirection.rtl ? TextDirection.rtl : TextDirection.ltr;
 
-/// Number + label tile for the home dashboard.
-class StatTile extends StatelessWidget {
-  const StatTile({
+/// One counter on the home "attention" card: icon, number and label.
+class StatCell extends StatelessWidget {
+  const StatCell({
     super.key,
     required this.icon,
     required this.label,
@@ -335,26 +359,336 @@ class StatTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final quiet = value == 0;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: (quiet ? scheme.outline : color).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, size: 17, color: quiet ? scheme.outline : color),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '$value',
+                  style: TextStyle(
+                    fontSize: 22,
+                    height: 1.1,
+                    fontWeight: FontWeight.w700,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                    color: quiet ? scheme.outline : scheme.onSurface,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Shortcut in the home grid: tinted icon over a two-line label.
+class ActionTile extends StatelessWidget {
+  const ActionTile({super.key, required this.icon, required this.label, required this.onTap, this.color});
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final c = color ?? scheme.primary;
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(color: c.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(17)),
+              child: Icon(icon, color: c, size: 24),
+            ),
+            const SizedBox(height: 7),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, height: 1.3),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Lays children out in [columns] equal columns; each row is as tall as its
+/// content, so labels never get clipped (a fixed-ratio grid did, and would
+/// again with a larger system font).
+class ColumnsWrap extends StatelessWidget {
+  const ColumnsWrap({super.key, required this.columns, required this.children, this.spacing = 0});
+
+  final int columns;
+  final double spacing;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = (constraints.maxWidth - spacing * (columns - 1)) / columns;
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: [for (final child in children) SizedBox(width: width, child: child)],
+        );
+      },
+    );
+  }
+}
+
+/// Top card of a detail screen (ticket, complaint, message): pills, title,
+/// the full text and a date line.
+class DetailHeader extends StatelessWidget {
+  const DetailHeader({super.key, required this.pills, this.title, this.body, this.meta});
+
+  final List<Widget> pills;
+  final String? title;
+  final String? body;
+  final String? meta;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(11)),
-                child: Icon(icon, color: color, size: 20),
-              ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(spacing: 6, runSpacing: 6, children: pills),
+            if (title != null && title!.isNotEmpty) ...[
               const SizedBox(height: 12),
-              Text('$value', style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: scheme.onSurface)),
-              Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w500)),
+              Text(title!, style: Theme.of(context).textTheme.titleLarge),
             ],
+            if (body != null && body!.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              SelectableText(body!, style: TextStyle(fontSize: 15, height: 1.7, color: scheme.onSurface)),
+            ],
+            if (meta != null && meta!.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Icon(Icons.schedule_rounded, size: 15, color: scheme.onSurfaceVariant),
+                  const SizedBox(width: 6),
+                  Text(meta!, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One step in a vertical history (ticket updates): dot, connecting line, text.
+class TimelineEntry extends StatelessWidget {
+  const TimelineEntry({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.text,
+    required this.date,
+    this.color,
+    this.last = false,
+  });
+
+  final IconData icon;
+  final String title;
+  final String text;
+  final String date;
+  final Color? color;
+  final bool last;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final c = color ?? scheme.primary;
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 32,
+            child: Column(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(color: c.withValues(alpha: 0.12), shape: BoxShape.circle),
+                  child: Icon(icon, size: 16, color: c),
+                ),
+                if (!last) Expanded(child: Container(width: 2, color: scheme.outlineVariant.withValues(alpha: 0.6))),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(bottom: last ? 0 : 16, top: 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14))),
+                      Text(date, style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                    ],
+                  ),
+                  if (text.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    SelectableText(text, style: TextStyle(height: 1.6, color: scheme.onSurface)),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A titled group of form fields on its own card (the ticket form's steps).
+class FieldGroup extends StatelessWidget {
+  const FieldGroup({super.key, required this.title, required this.children, this.icon, this.hint});
+
+  final String title;
+  final IconData? icon;
+  final String? hint;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, size: 18, color: scheme.primary),
+                  const SizedBox(width: 8),
+                ],
+                Expanded(child: Text(title, style: Theme.of(context).textTheme.titleSmall)),
+              ],
+            ),
+            if (hint != null) ...[
+              const SizedBox(height: 2),
+              Text(hint!, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+            ],
+            const SizedBox(height: 12),
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Selectable tile with an icon (ticket categories, urgency).
+class ChoiceTile extends StatelessWidget {
+  const ChoiceTile({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.icon,
+    this.color,
+  });
+
+  final IconData? icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final c = color ?? scheme.primary;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
+      decoration: BoxDecoration(
+        color: selected ? c.withValues(alpha: 0.1) : Theme.of(context).inputDecorationTheme.fillColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: selected ? c : Colors.transparent, width: 1.6),
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: icon == null ? 11 : 12, horizontal: 6),
+            // Equal tiles in a row even when one label takes two lines.
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: icon == null ? 0 : 74),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (icon != null) ...[
+                    Icon(icon, color: selected ? c : scheme.onSurfaceVariant, size: 24),
+                    const SizedBox(height: 6),
+                  ],
+                  Text(
+                    label,
+                    maxLines: icon == null ? 1 : 2,
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      height: 1.3,
+                      fontSize: 12.5,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                      color: selected ? c : scheme.onSurface,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -362,42 +696,88 @@ class StatTile extends StatelessWidget {
   }
 }
 
-/// Icon + label button for the quick-action row.
-class QuickAction extends StatelessWidget {
-  const QuickAction({super.key, required this.icon, required this.label, required this.onTap});
+/// Looks like a filled field; tapping opens a picker. Shows the choice and a second line.
+class PickerField extends StatelessWidget {
+  const PickerField({
+    super.key,
+    required this.label,
+    required this.icon,
+    required this.onTap,
+    this.value,
+    this.detail,
+    this.errorText,
+    this.loading = false,
+  });
 
-  final IconData icon;
   final String label;
-  final VoidCallback onTap;
+  final IconData icon;
+  final VoidCallback? onTap;
+  final String? value;
+  final String? detail;
+  final String? errorText;
+  final bool loading;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return SizedBox(
-      width: 92,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(
-            children: [
-              Container(
-                width: 54,
-                height: 54,
-                decoration: BoxDecoration(
-                  color: scheme.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: Icon(icon, color: scheme.primary),
+    final empty = value == null || value!.isEmpty;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Material(
+          color: Theme.of(context).inputDecorationTheme.fillColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: errorText != null ? BorderSide(color: scheme.error, width: 1.2) : BorderSide.none,
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: Row(
+                children: [
+                  Icon(icon, color: empty ? scheme.onSurfaceVariant : scheme.primary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          empty ? label : value!,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: empty ? FontWeight.w500 : FontWeight.w700,
+                            color: empty ? scheme.onSurfaceVariant : scheme.onSurface,
+                          ),
+                        ),
+                        if (!empty && detail != null && detail!.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            detail!,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant, height: 1.4),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (loading)
+                    const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  else
+                    Icon(Icons.unfold_more_rounded, color: scheme.onSurfaceVariant),
+                ],
               ),
-              const SizedBox(height: 8),
-              Text(label, textAlign: TextAlign.center, maxLines: 2,
-                  style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, height: 1.3)),
-            ],
+            ),
           ),
         ),
-      ),
+        if (errorText != null)
+          Padding(
+            padding: const EdgeInsetsDirectional.only(start: 14, top: 6),
+            child: Text(errorText!, style: TextStyle(color: scheme.error, fontSize: 12)),
+          ),
+      ],
     );
   }
 }
@@ -721,18 +1101,38 @@ class FilterBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-      child: SizedBox(
-        width: double.infinity,
-        child: SegmentedButton<String>(
-          segments: [
-            for (final entry in segments.entries) ButtonSegment(value: entry.key, label: Text(entry.value)),
-          ],
-          selected: {selected},
-          showSelectedIcon: false,
-          onSelectionChanged: (selection) => onChanged(selection.first),
-        ),
+    final scheme = Theme.of(context).colorScheme;
+    // Pills in a scrolling row: long labels ("needs follow-up") stay on one line.
+    return SizedBox(
+      height: 52,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+        children: [
+          for (final entry in segments.entries)
+            Padding(
+              padding: const EdgeInsetsDirectional.only(end: 8),
+              child: Material(
+                color: entry.key == selected ? scheme.primary : Theme.of(context).inputDecorationTheme.fillColor,
+                borderRadius: BorderRadius.circular(20),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: () => onChanged(entry.key),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+                    child: Text(
+                      entry.value,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: entry.key == selected ? FontWeight.w700 : FontWeight.w500,
+                        color: entry.key == selected ? scheme.onPrimary : scheme.onSurface,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
