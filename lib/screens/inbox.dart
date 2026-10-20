@@ -4,8 +4,10 @@ import '../api.dart';
 import '../push.dart';
 import '../strings.dart';
 import '../widgets.dart';
+import 'announcements.dart';
 import 'complaints.dart';
 import 'contacts.dart';
+import 'management.dart';
 import 'tickets.dart';
 
 IconData categoryIcon(String? category) {
@@ -20,6 +22,10 @@ IconData categoryIcon(String? category) {
       return Icons.mail_outline;
     case 'careers':
       return Icons.work_outline;
+    case 'announcements':
+      return Icons.campaign;
+    case 'accounts':
+      return Icons.person_add_alt_1_outlined;
     default:
       return Icons.notifications_none;
   }
@@ -44,6 +50,15 @@ Future<bool> openTarget(BuildContext context, PushTarget target) async {
       break;
     case 'contacts':
       if (api.can('contacts')) screen = ContactDetailScreen(id: id);
+      break;
+    case 'announcements':
+      screen = AnnouncementDetailScreen(id: id);
+      break;
+    case 'accounts':
+      if (api.can('users')) screen = const PendingUsersScreen();
+      break;
+    case 'careers':
+      if (api.can('careers')) screen = ApplicationDetailScreen(id: id);
       break;
   }
 

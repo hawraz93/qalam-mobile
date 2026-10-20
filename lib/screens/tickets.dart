@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../api.dart';
 import '../strings.dart';
@@ -407,7 +408,11 @@ class _TicketAttachments extends StatelessWidget {
                     clipBehavior: Clip.antiAlias,
                     borderRadius: BorderRadius.circular(14),
                     child: InkWell(
-                      onTap: file['is_image'] == true ? () => _open(context, file['url'].toString()) : null,
+                      onTap: file['is_image'] == true
+                          ? () => _open(context, file['url'].toString())
+                          : file['open_url'] == null
+                              ? null
+                              : () => launchUrl(Uri.parse(file['open_url'].toString()), mode: LaunchMode.externalApplication),
                       child: file['is_image'] == true
                           ? Image.network(
                               file['url'].toString(),

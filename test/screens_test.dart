@@ -17,6 +17,9 @@ import 'package:http/testing.dart';
 import 'package:qalam_notify/api.dart';
 import 'package:qalam_notify/main.dart';
 import 'package:qalam_notify/screens/account.dart';
+import 'package:qalam_notify/screens/announcements.dart';
+import 'package:qalam_notify/screens/directory.dart';
+import 'package:qalam_notify/screens/management.dart';
 import 'package:qalam_notify/screens/complaints.dart';
 import 'package:qalam_notify/screens/contacts.dart';
 import 'package:qalam_notify/screens/home.dart';
@@ -43,7 +46,7 @@ final Map<String, dynamic> _user = {
   'department': 'قسم تقنيات المعلومات',
   'department_id': 85,
   'created_at': '2024-02-11T09:00:00+03:00',
-  'can': {'it_tickets': true, 'complaints': true, 'contacts': true},
+  'can': {'it_tickets': true, 'complaints': true, 'contacts': true, 'careers': true, 'announcements': true, 'management': true, 'users': true},
   'teacher': {
     'name_ar': 'هاوراز نوزاد',
     'name_en': 'Hawraz Nawzad',
@@ -139,6 +142,36 @@ final Map<String, dynamic> _contact = {
   'created_at': _ago(const Duration(days: 2)),
 };
 
+final _announcements = [
+  {'id': 1, 'title': 'دەوامی ڕۆژی پێنجشەممە', 'excerpt': 'بەهۆی بۆنەی نیشتمانییەوە دەوام تا کاتژمێر 12 دەبێت.', 'priority': 'important', 'sender': 'سەرۆکایەتی زانکۆ', 'recipients_count': 183, 'read_count': 141, 'has_attachment': true, 'read_at': null, 'created_at': _ago(const Duration(hours: 1))},
+  {'id': 2, 'title': 'کۆبوونەوەی ئەنجومەنی بەشەکان', 'excerpt': 'کۆبوونەوەکە ڕۆژی یەکشەممە کاتژمێر 10 لە هۆڵی سەرەکی دەبێت.', 'priority': 'normal', 'sender': 'یاریدەدەری سەرۆک', 'recipients_count': 42, 'read_count': 42, 'has_attachment': false, 'read_at': '2026-10-19', 'created_at': _ago(const Duration(days: 1))},
+];
+
+final Map<String, dynamic> _announcement = {
+  ..._announcements.first,
+  'body': 'بەڕێزان کارمەندان و مامۆستایان\n\nبەهۆی بۆنەی نیشتمانییەوە، دەوامی ڕۆژی پێنجشەممە تا کاتژمێر 12ی نیوەڕۆ دەبێت. تکایە کارەکانتان بەپێی ئەوە ڕێک بخەن.\n\nلەگەڵ ڕێزدا',
+  'attachment': {'url': 'https://example.com/a.pdf', 'open_url': 'https://example.com/a.pdf', 'is_image': false},
+  'can_see_report': true,
+};
+
+final _people = [
+  {'id': 1, 'name': 'د. کاوە ئەحمەد', 'title': 'پرۆفیسۆری یاریدەدەر', 'department': 'قسم تقنيات المعلومات', 'email': 'kawa@alqalam.edu.iq', 'phone': '07701234567'},
+  {'id': 2, 'name': 'سارا عەلی', 'title': null, 'department': 'شعبة الرواتب', 'email': 'sara@alqalam.edu.iq', 'phone': null},
+  {'id': 3, 'name': 'ئاراس عومەر', 'title': 'مدرس', 'department': 'كلية التربية › اللغة الانكليزية', 'email': 'aras@alqalam.edu.iq', 'phone': '07501112233'},
+];
+
+final _overview = {
+  'tickets': {'needs_attention': 3, 'overdue': 1, 'unassigned': 2, 'active': 7, 'resolved_week': 12, 'rating_average': 4.4, 'rating_count': 27},
+  'complaints': {'needs_attention': 1, 'overdue': 0},
+  'contacts': {'unread': 2},
+  'accounts': {'pending': 2, 'active': 183},
+  'careers': {'new': 4, 'month': 11},
+  'visits': {'today': 1840, 'week': 12650},
+  'announcements': [
+    {'id': 1, 'title': 'دەوامی ڕۆژی پێنجشەممە', 'recipients_count': 183, 'read_count': 141, 'created_at': _ago(const Duration(hours: 1))},
+  ],
+};
+
 http.Response _json(Object body) =>
     http.Response.bytes(utf8.encode(jsonEncode(body)), 200, headers: {'content-type': 'application/json; charset=utf-8'});
 
@@ -155,6 +188,12 @@ final _fakeServer = MockClient((request) async {
     '/notifications' => _json(_page(_notifications)),
     '/my/tickets' || '/tickets' => _json(_page(_tickets)),
     '/me' => _json({'user': _user}),
+    '/announcements' || '/announcements/sent' => _json(_page(_announcements)),
+    '/announcements/1' => _json({'data': _announcement}),
+    '/announcements/audience' => _json({'departments': _departments, 'roles': ['Admin', 'Employee', 'Teacher']}),
+    '/announcements/audience-count' => _json({'count': 183}),
+    '/directory' => _json(_page(_people)),
+    '/management/overview' => _json(_overview),
     '/tickets/12' => _json({'data': _ticketDetail}),
     '/my/tickets/9' => _json({'data': _myTicketDetail}),
     '/complaints/5' => _json({'data': _complaint}),
@@ -236,5 +275,10 @@ void main() {
   screen('10_complaint', () => const ComplaintDetailScreen(id: 5));
   screen('11_contact', () => const ContactDetailScreen(id: 3));
   screen('12_ticket_dark', () => const TicketDetailScreen(id: 9, admin: false), brightness: Brightness.dark);
+  screen('13_announcements', () => const AnnouncementsScreen());
+  screen('14_announcement', () => const AnnouncementDetailScreen(id: 1));
+  screen('15_compose', () => const ComposeAnnouncementScreen());
+  screen('16_directory', () => const DirectoryScreen());
+  screen('17_management', () => const ManagementScreen());
   screen('07_account', () => Scaffold(body: AccountTab(onSignedOut: () {}, onLanguageChanged: () {})));
 }

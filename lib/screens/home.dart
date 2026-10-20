@@ -4,7 +4,10 @@ import '../api.dart';
 import '../strings.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import 'announcements.dart';
+import 'directory.dart';
 import 'inbox.dart' show NotificationCard;
+import 'management.dart';
 import 'portfolio.dart';
 import 'teacher.dart';
 import 'ticket_form.dart';
@@ -84,6 +87,11 @@ class HomeTabState extends State<HomeTab> {
 
     int count(String key) => (summary[key] as int?) ?? 0;
 
+    void push(Widget screen) =>
+        Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen)).then((_) => refresh());
+    final managementScreen = ManagementScreen(onOpenWork: (section) => widget.onOpenTab('work', section: section));
+    final hasManagement = api.can('management') || api.can('users') || api.can('careers');
+
     final stats = <Widget>[
       StatCell(
         icon: Icons.notifications_active_outlined,
@@ -91,6 +99,13 @@ class HomeTabState extends State<HomeTab> {
         value: count('unread_notifications'),
         color: brandColor,
         onTap: () => widget.onOpenTab('inbox'),
+      ),
+      StatCell(
+        icon: Icons.campaign_outlined,
+        label: s.t('announcements'),
+        value: count('announcements'),
+        color: const Color(0xFF7C4DFF),
+        onTap: () => push(const AnnouncementsScreen()),
       ),
       StatCell(
         icon: Icons.confirmation_number_outlined,
@@ -123,17 +138,40 @@ class HomeTabState extends State<HomeTab> {
           color: Tone.success,
           onTap: () => widget.onOpenTab('work', section: 'contacts'),
         ),
+      if (api.can('users'))
+        StatCell(
+          icon: Icons.person_add_alt_1_outlined,
+          label: s.t('pending_users'),
+          value: count('pending_users'),
+          color: Tone.info,
+          onTap: () => push(const PendingUsersScreen()),
+        ),
+      if (api.can('careers'))
+        StatCell(
+          icon: Icons.work_outline_rounded,
+          label: s.t('job_applications'),
+          value: count('new_applications'),
+          color: Tone.neutral,
+          onTap: () => push(const ApplicationsScreen()),
+        ),
     ];
     final waiting = [
       'unread_notifications',
+      'announcements',
       'my_open_tickets',
       if (api.can('it_tickets')) 'it_tickets',
       if (api.can('complaints')) 'complaints',
       if (api.can('contacts')) 'contacts',
+      if (api.can('users')) 'pending_users',
+      if (api.can('careers')) 'new_applications',
     ].fold(0, (sum, key) => sum + count(key));
 
     final actions = <Widget>[
       ActionTile(icon: Icons.add_comment_outlined, label: s.t('new_ticket'), onTap: () => _newTicket(context)),
+      ActionTile(icon: Icons.campaign_outlined, label: s.t('announcements'), onTap: () => push(const AnnouncementsScreen())),
+      ActionTile(icon: Icons.contact_phone_outlined, label: s.t('directory'), onTap: () => push(const DirectoryScreen())),
+      if (hasManagement)
+        ActionTile(icon: Icons.insights_rounded, label: s.t('management'), onTap: () => push(managementScreen)),
       if (api.isTeacher)
         ActionTile(
           icon: Icons.school_outlined,

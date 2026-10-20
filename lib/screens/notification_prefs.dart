@@ -20,6 +20,8 @@ class _NotificationPrefsScreenState extends State<NotificationPrefsScreen> {
 
   List<(String key, IconData icon)> get _categories => [
         ('ticket_updates', Icons.reply),
+        ('announcements', Icons.campaign),
+        if (api.can('users')) ('accounts', Icons.person_add_alt_1_outlined),
         if (api.can('it_tickets')) ('it_tickets', Icons.confirmation_number_outlined),
         if (api.can('complaints')) ('complaints', Icons.campaign_outlined),
         if (api.can('contacts')) ('contacts', Icons.mail_outline),

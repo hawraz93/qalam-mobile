@@ -6,6 +6,9 @@ import 'complaints.dart';
 import 'contacts.dart';
 import 'tickets.dart';
 
+/// Opens a section of the Work tab from elsewhere (e.g. the management overview).
+typedef WorkShortcut = void Function(String section);
+
 /// One tab that groups everything the user handles: the IT desk, complaints and
 /// contact messages for admins, plus the tickets they opened themselves.
 /// Users without any admin area see their own tickets directly.
