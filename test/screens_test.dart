@@ -17,6 +17,7 @@ import 'package:http/testing.dart';
 import 'package:qalam_notify/api.dart';
 import 'package:qalam_notify/main.dart';
 import 'package:qalam_notify/screens/account.dart';
+import 'package:qalam_notify/screens/admin_tools.dart';
 import 'package:qalam_notify/screens/announcements.dart';
 import 'package:qalam_notify/screens/directory.dart';
 import 'package:qalam_notify/screens/management.dart';
@@ -46,7 +47,7 @@ final Map<String, dynamic> _user = {
   'department': 'قسم تقنيات المعلومات',
   'department_id': 85,
   'created_at': '2024-02-11T09:00:00+03:00',
-  'can': {'it_tickets': true, 'complaints': true, 'contacts': true, 'careers': true, 'announcements': true, 'management': true, 'users': true},
+  'can': {'it_tickets': true, 'complaints': true, 'contacts': true, 'careers': true, 'announcements': true, 'management': true, 'users': true, 'activity': true},
   'teacher': {
     'name_ar': 'هاوراز نوزاد',
     'name_en': 'Hawraz Nawzad',
@@ -194,6 +195,33 @@ final _fakeServer = MockClient((request) async {
     '/announcements/audience-count' => _json({'count': 183}),
     '/directory' => _json(_page(_people)),
     '/management/overview' => _json(_overview),
+    '/insights/visits' => _json({
+        'days': 30, 'total': 48210, 'previous_total': 41730, 'today': 1840,
+        'trend': [for (var i = 0; i < 30; i++) {'date': '2026-10-${(i % 28) + 1}', 'visits': 900 + (i * 37) % 900 + (i % 7 == 5 ? -500 : 0)}],
+        'sections': [
+          {'key': 'home', 'visits': 14200}, {'key': 'posts', 'visits': 11800}, {'key': 'department', 'visits': 7400},
+          {'key': 'exam-results', 'visits': 6100}, {'key': 'teacher', 'visits': 4300}, {'key': 'careers', 'visits': 1900},
+        ],
+        'top_pages': [
+          {'title': 'الصفحة الرئيسية', 'path': '/', 'visits': 14200},
+          {'title': 'نتائج الامتحانات', 'path': '/exam-results', 'visits': 6100},
+          {'title': 'قسم الصيدلة', 'path': '/department/academic/الصيدلة', 'visits': 2300},
+        ],
+      }),
+    '/activity' => _json(_page([
+        {'id': 1, 'description': 'Role changed for sara@alqalam.edu.iq: Employee → Teacher', 'event': 'role_change', 'subject': 'User', 'causer': {'id': 7, 'name': 'هاوڕاز نەوزاد'}, 'ip': '10.0.0.4', 'source': 'mobile_app', 'created_at': _ago(const Duration(minutes: 3))},
+        {'id': 2, 'description': 'Login', 'event': 'login', 'subject': null, 'causer': {'id': 9, 'name': 'د. کاوە'}, 'ip': '185.12.4.9', 'source': null, 'created_at': _ago(const Duration(minutes: 20))},
+        {'id': 3, 'description': 'Failed login attempt', 'event': 'failed_login', 'subject': null, 'causer': null, 'ip': '91.200.1.7', 'source': null, 'created_at': _ago(const Duration(hours: 2))},
+        {'id': 4, 'description': 'Post deleted: الإعلان القديم', 'event': 'delete', 'subject': 'posts', 'causer': {'id': 3, 'name': 'ئاراس'}, 'ip': '10.0.0.8', 'source': null, 'created_at': _ago(const Duration(hours: 5))},
+      ])),
+    '/users' => _json(_page([
+        {'id': 21, 'name': 'سارا عەلی', 'email': 'sara@alqalam.edu.iq', 'department': 'شعبة الرواتب', 'roles': ['Teacher'], 'is_active': true},
+        {'id': 22, 'name': 'ڕێبین سەعید', 'email': 'rebin@alqalam.edu.iq', 'department': 'كلية التربية', 'roles': ['Employee'], 'is_active': false},
+      ])),
+    '/users/21' => _json({'data': {'id': 21, 'name': 'سارا عەلی', 'email': 'sara@alqalam.edu.iq', 'phone': '07501112233', 'department': 'شعبة الرواتب', 'roles': ['Teacher'], 'is_active': true, 'username': 'sara', 'last_activity': _ago(const Duration(hours: 1)), 'recent_activity': [
+        {'id': 5, 'description': 'Login', 'event': 'login', 'created_at': _ago(const Duration(hours: 1))},
+        {'id': 6, 'description': 'Research updated', 'event': 'edit', 'created_at': _ago(const Duration(days: 1))},
+      ]}}),
     '/tickets/12' => _json({'data': _ticketDetail}),
     '/my/tickets/9' => _json({'data': _myTicketDetail}),
     '/complaints/5' => _json({'data': _complaint}),
@@ -280,5 +308,9 @@ void main() {
   screen('15_compose', () => const ComposeAnnouncementScreen());
   screen('16_directory', () => const DirectoryScreen());
   screen('17_management', () => const ManagementScreen());
+  screen('18_visits', () => const VisitsScreen());
+  screen('19_activity', () => const ActivityLogScreen());
+  screen('20_users', () => const UsersScreen());
+  screen('21_user', () => const UserDetailScreen(id: 21));
   screen('07_account', () => Scaffold(body: AccountTab(onSignedOut: () {}, onLanguageChanged: () {})));
 }

@@ -90,7 +90,7 @@ class HomeTabState extends State<HomeTab> {
     void push(Widget screen) =>
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen)).then((_) => refresh());
     final managementScreen = ManagementScreen(onOpenWork: (section) => widget.onOpenTab('work', section: section));
-    final hasManagement = api.can('management') || api.can('users') || api.can('careers');
+    final hasManagement = api.can('management') || api.can('users') || api.can('careers') || api.can('activity');
 
     final stats = <Widget>[
       StatCell(
