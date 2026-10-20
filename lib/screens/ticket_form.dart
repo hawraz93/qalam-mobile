@@ -46,6 +46,9 @@ class _TicketFormScreenState extends State<TicketFormScreen> {
 
   List<Map<String, dynamic>> _departments = [];
   Map<String, dynamic>? _department;
+
+  /// 'Administrative' or 'Academic': narrows the long department list first.
+  String _kind = 'Administrative';
   bool _departmentsLoading = true;
   bool _departmentsFailed = false;
   bool _departmentMissing = false;
@@ -80,6 +83,8 @@ class _TicketFormScreenState extends State<TicketFormScreen> {
         _departments = rows;
         // Most tickets are about the sender's own department: start there.
         _department ??= rows.where((d) => d['id'] == own).firstOrNull;
+        final ownKind = _department?['type']?.toString();
+        if (ownKind == 'Academic' || ownKind == 'Administrative') _kind = ownKind!;
       });
     } catch (_) {
       if (mounted) setState(() => _departmentsFailed = true);
@@ -96,8 +101,10 @@ class _TicketFormScreenState extends State<TicketFormScreen> {
       title: s.t('choose_department'),
       load: (search) async {
         final q = _normalize(search.trim());
-        if (q.isEmpty) return _departments;
-        return _departments.where((d) => _normalize('${d['name']} ${d['description']}').contains(q)).toList();
+        // Servers before 1.8.2 send no type: then the whole list is shown
+        final ofKind = _departments.where((d) => d['type'] == null || d['type'] == _kind);
+        if (q.isEmpty) return ofKind.toList();
+        return ofKind.where((d) => _normalize('${d['name']} ${d['description']}').contains(q)).toList();
       },
       label: (row) => row['name']?.toString() ?? '',
       sublabel: (row) => row['description']?.toString() ?? '',
@@ -235,6 +242,29 @@ class _TicketFormScreenState extends State<TicketFormScreen> {
               hint: s.t('ticket_where_hint'),
               icon: Icons.location_on_outlined,
               children: [
+                Row(
+                  children: [
+                    for (final (kind, icon) in const [
+                      ('Administrative', Icons.apartment_rounded),
+                      ('Academic', Icons.school_outlined),
+                    ]) ...[
+                      if (kind == 'Academic') const SizedBox(width: 8),
+                      Expanded(
+                        child: ChoiceTile(
+                          icon: icon,
+                          label: s.t(kind == 'Academic' ? 'dept_academic' : 'dept_administrative'),
+                          selected: _kind == kind,
+                          onTap: () => setState(() {
+                            _kind = kind;
+                            final pickedKind = _department?['type'];
+                            if (pickedKind != null && pickedKind != kind) _department = null;
+                          }),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 10),
                 PickerField(
                   label: _departmentsFailed ? s.t('departments_failed') : s.t('choose_department'),
                   icon: Icons.account_tree_outlined,

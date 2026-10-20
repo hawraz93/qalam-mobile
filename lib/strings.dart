@@ -7,7 +7,7 @@ class S {
   final String lang;
 
   /// Shown on the account page; keep in step with pubspec.yaml.
-  static const appVersion = '1.8.1';
+  static const appVersion = '1.8.2';
 
   /// Set at startup from the saved choice or the phone language. Kept apart from the
   /// Material locale because Flutter ships no Material translations for Kurdish (ckb).
@@ -84,6 +84,8 @@ class S {
       'reopen': 'إعادة فتح',
       'no_email': 'لا يوجد بريد إلكتروني للرد',
       'attachments': 'المرفقات',
+      'dept_administrative': 'إداري',
+      'dept_academic': 'علمي',
       'website_visits': 'زيارات الموقع',
       'activity_log': 'سجل النشاطات',
       'users_roles': 'المستخدمون والأدوار',
@@ -489,6 +491,8 @@ class S {
       'reopen': 'کردنەوەی دووبارە',
       'no_email': 'ئیمەیڵ نییە بۆ وەڵامدانەوە',
       'attachments': 'هاوپێچەکان',
+      'dept_administrative': 'ئیداری',
+      'dept_academic': 'زانستی',
       'website_visits': 'سەردانی ماڵپەڕ',
       'activity_log': 'لۆگی چالاکییەکان',
       'users_roles': 'بەکارهێنەران و ڕۆڵەکان',
@@ -894,6 +898,8 @@ class S {
       'reopen': 'Reopen',
       'no_email': 'No email address to reply to',
       'attachments': 'Attachments',
+      'dept_administrative': 'Administrative',
+      'dept_academic': 'Academic',
       'website_visits': 'Website visits',
       'activity_log': 'Activity log',
       'users_roles': 'Users and roles',
