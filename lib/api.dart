@@ -209,6 +209,30 @@ class Api {
     return _handle(response);
   }
 
+  /// Multipart POST with text fields and any number of files under one array field
+  /// (Laravel reads `attachments[]` as a list).
+  Future<dynamic> postFiles(String path, Map<String, String> fields, List<String> filePaths,
+      {String field = 'attachments[]'}) async {
+    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl$path'))
+      ..headers['Accept'] = 'application/json'
+      ..headers.addAll(_clientHeaders)
+      ..fields.addAll(fields);
+    if (_token != null) {
+      request.headers['Authorization'] = 'Bearer $_token';
+    }
+    for (final filePath in filePaths) {
+      request.files.add(await http.MultipartFile.fromPath(field, filePath));
+    }
+
+    final http.Response response;
+    try {
+      response = await http.Response.fromStream(await client.send(request).timeout(const Duration(seconds: 120)));
+    } catch (_) {
+      throw ApiException(0, 'network');
+    }
+    return _handle(response);
+  }
+
   Future<dynamic> _send(
     String method,
     String path, {

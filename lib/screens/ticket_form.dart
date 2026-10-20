@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../api.dart';
 import '../strings.dart';
@@ -25,6 +28,7 @@ class _TicketFormScreenState extends State<TicketFormScreen> {
   };
 
   static const _priorities = ['low', 'medium', 'high', 'urgent'];
+  static const _maxPhotos = 3;
 
   final _form = GlobalKey<FormState>();
   final _name = TextEditingController();
@@ -36,6 +40,9 @@ class _TicketFormScreenState extends State<TicketFormScreen> {
   String _priority = 'medium';
   bool _busy = false;
   String? _sentTicketNo;
+
+  /// Local paths of the photos to send, already scaled down by the picker.
+  final List<String> _photos = [];
 
   List<Map<String, dynamic>> _departments = [];
   Map<String, dynamic>? _department;
@@ -121,21 +128,63 @@ class _TicketFormScreenState extends State<TicketFormScreen> {
 
     setState(() => _busy = true);
     try {
-      final body = await api.post('/tickets/submit', {
+      final fields = {
         if (_guest) 'requester_name': _name.text.trim(),
         if (_guest) 'requester_email': _email.text.trim(),
         if (_phone.text.trim().isNotEmpty) 'requester_phone': _phone.text.trim(),
-        'department_id': _department!['id'],
+        'department_id': '${_department!['id']}',
         'category': _category,
         'priority': _priority,
         'title': _title.text.trim(),
         'description': _description.text.trim(),
-      });
+      };
+      final body = _photos.isEmpty
+          ? await api.post('/tickets/submit', fields)
+          : await api.postFiles('/tickets/submit', fields, _photos);
       if (mounted) setState(() => _sentTicketNo = body['data']['ticket_no']?.toString() ?? '');
     } catch (e) {
       if (mounted) toast(context, errorText(context, e));
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _addPhoto() async {
+    final s = S.of(context);
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: Text(s.t('camera')),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: Text(s.t('gallery')),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+
+    // Phone photos are 4–8 MB; 1600 px at 80% keeps them sharp enough and well under the limit
+    final picker = ImagePicker();
+    try {
+      final picked = source == ImageSource.camera
+          ? [await picker.pickImage(source: source, maxWidth: 1600, maxHeight: 1600, imageQuality: 80)]
+          : await picker.pickMultiImage(maxWidth: 1600, maxHeight: 1600, imageQuality: 80, limit: _maxPhotos - _photos.length);
+      final paths = picked.whereType<XFile>().map((file) => file.path);
+      if (mounted) setState(() => _photos.addAll(paths.take(_maxPhotos - _photos.length)));
+    } catch (e) {
+      if (mounted) toast(context, errorText(context, e));
     }
   }
 
@@ -268,6 +317,23 @@ class _TicketFormScreenState extends State<TicketFormScreen> {
                 ),
               ],
             ),
+            const SizedBox(height: 12),
+            FieldGroup(
+              title: s.t('attachments'),
+              hint: s.t('photos_hint'),
+              icon: Icons.photo_camera_outlined,
+              children: [
+                ColumnsWrap(
+                  columns: 3,
+                  spacing: 8,
+                  children: [
+                    for (final path in _photos)
+                      _PhotoThumb(path: path, onRemove: () => setState(() => _photos.remove(path))),
+                    if (_photos.length < _maxPhotos) _AddPhotoTile(onTap: _busy ? null : _addPhoto),
+                  ],
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -280,6 +346,76 @@ class _TicketFormScreenState extends State<TicketFormScreen> {
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(Icons.send_rounded),
             label: Text(s.t('send_ticket')),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PhotoThumb extends StatelessWidget {
+  const _PhotoThumb({required this.path, required this.onRemove});
+
+  final String path;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return AspectRatio(
+      aspectRatio: 1,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: Image.file(File(path), fit: BoxFit.cover, cacheWidth: 300),
+          ),
+          PositionedDirectional(
+            top: 4,
+            end: 4,
+            child: Material(
+              color: Colors.black54,
+              shape: const CircleBorder(),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: onRemove,
+                child: const Padding(padding: EdgeInsets.all(4), child: Icon(Icons.close_rounded, size: 18, color: Colors.white)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AddPhotoTile extends StatelessWidget {
+  const _AddPhotoTile({required this.onTap});
+
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return AspectRatio(
+      aspectRatio: 1,
+      child: Material(
+        color: scheme.primary.withValues(alpha: 0.06),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: scheme.primary.withValues(alpha: 0.35)),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.add_a_photo_outlined, color: scheme.primary),
+              const SizedBox(height: 6),
+              Text(S.of(context).t('add_photo'),
+                  textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: scheme.primary, fontWeight: FontWeight.w600)),
+            ],
           ),
         ),
       ),

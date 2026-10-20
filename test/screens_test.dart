@@ -91,6 +91,10 @@ final Map<String, dynamic> _ticketDetail = {
   'assignee': null,
   'it_notes': '',
   'updates': [],
+  'attachments': [
+    {'url': 'https://example.com/a.pdf', 'filename': 'error-report.pdf', 'is_image': false},
+  ],
+  'rating': null,
 };
 
 final Map<String, dynamic> _myTicketDetail = {
@@ -99,6 +103,8 @@ final Map<String, dynamic> _myTicketDetail = {
   'department_name': 'كلية التربية',
   'assignee': 'ئاراس عومەر',
   'it_notes': 'ڕاوتەرەکە گۆڕدرا.',
+  'can_rate': true,
+  'rating': null,
   'updates': [
     {'kind': 'status', 'title': 'دۆخ گۆڕا بۆ: لە کاردایە', 'body': '', 'created_at': _ago(const Duration(days: 2))},
     {'kind': 'reply', 'title': 'وەڵامی تیمی IT', 'reply_message': 'هێڵەکە چاک کرا، تکایە تاقی بکەرەوە.', 'created_at': _ago(const Duration(hours: 20))},

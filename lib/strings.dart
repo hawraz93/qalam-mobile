@@ -7,7 +7,7 @@ class S {
   final String lang;
 
   /// Shown on the account page; keep in step with pubspec.yaml.
-  static const appVersion = '1.5.1';
+  static const appVersion = '1.6.0';
 
   /// Set at startup from the saved choice or the phone language. Kept apart from the
   /// Material locale because Flutter ships no Material translations for Kurdish (ckb).
@@ -84,6 +84,17 @@ class S {
       'reopen': 'إعادة فتح',
       'no_email': 'لا يوجد بريد إلكتروني للرد',
       'attachments': 'المرفقات',
+      'add_photo': 'إضافة صورة',
+      'camera': 'الكاميرا',
+      'gallery': 'المعرض',
+      'photos_hint': 'صورة للمشكلة تساعد الفريق على الحل أسرع (حتى 3).',
+      'rate_title': 'كيف كانت الخدمة؟',
+      'rate_hint': 'تقييمك يساعد فريق تقنية المعلومات على التحسن.',
+      'your_rating': 'تقييمك',
+      'rating_comment': 'ملاحظة (اختياري)',
+      'send_rating': 'إرسال التقييم',
+      'rating_saved': 'شكراً، تم حفظ تقييمك.',
+      'requester_rating': 'تقييم صاحب التذكرة',
       'mark_replied': 'تم الرد',
       'message': 'الرسالة',
       'new_push': 'إشعار جديد',
@@ -362,6 +373,17 @@ class S {
       'reopen': 'کردنەوەی دووبارە',
       'no_email': 'ئیمەیڵ نییە بۆ وەڵامدانەوە',
       'attachments': 'هاوپێچەکان',
+      'add_photo': 'زیادکردنی وێنە',
+      'camera': 'کامێرا',
+      'gallery': 'گەلەری',
+      'photos_hint': 'وێنەی کێشەکە یارمەتی تیمەکە دەدات خێراتر چارەسەری بکات (تا 3).',
+      'rate_title': 'خزمەتگوزارییەکە چۆن بوو؟',
+      'rate_hint': 'هەڵسەنگاندنەکەت یارمەتی تیمی IT دەدات باشتر بێت.',
+      'your_rating': 'هەڵسەنگاندنەکەت',
+      'rating_comment': 'تێبینی (ئارەزوومەندانە)',
+      'send_rating': 'ناردنی هەڵسەنگاندن',
+      'rating_saved': 'سوپاس، هەڵسەنگاندنەکەت پاشەکەوت کرا.',
+      'requester_rating': 'هەڵسەنگاندنی داواکار',
       'mark_replied': 'وەڵام درایەوە',
       'message': 'نامە',
       'new_push': 'ئاگاداریی نوێ',
@@ -640,6 +662,17 @@ class S {
       'reopen': 'Reopen',
       'no_email': 'No email address to reply to',
       'attachments': 'Attachments',
+      'add_photo': 'Add photo',
+      'camera': 'Camera',
+      'gallery': 'Gallery',
+      'photos_hint': 'A photo of the problem helps the team fix it faster (up to 3).',
+      'rate_title': 'How was the service?',
+      'rate_hint': 'Your rating helps the IT team improve.',
+      'your_rating': 'Your rating',
+      'rating_comment': 'Comment (optional)',
+      'send_rating': 'Send rating',
+      'rating_saved': 'Thank you, your rating was saved.',
+      'requester_rating': 'Requester rating',
       'mark_replied': 'Mark as replied',
       'message': 'Message',
       'new_push': 'New notification',

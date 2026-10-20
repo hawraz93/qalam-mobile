@@ -142,7 +142,7 @@ class TicketDetailScreen extends StatelessWidget {
           return Map<String, dynamic>.from(body['data'] as Map);
         },
         builder: (context, ticket, reload) =>
-            admin ? _AdminTicketBody(ticket: ticket, reload: reload) : _MyTicketBody(ticket: ticket),
+            admin ? _AdminTicketBody(ticket: ticket, reload: reload) : _MyTicketBody(ticket: ticket, reload: reload),
       ),
     );
   }
@@ -170,9 +170,10 @@ class _TicketHeader extends StatelessWidget {
 }
 
 class _MyTicketBody extends StatelessWidget {
-  const _MyTicketBody({required this.ticket});
+  const _MyTicketBody({required this.ticket, required this.reload});
 
   final Map<String, dynamic> ticket;
+  final VoidCallback reload;
 
   @override
   Widget build(BuildContext context) {
@@ -186,6 +187,11 @@ class _MyTicketBody extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
       children: [
         _TicketHeader(ticket: ticket),
+        if (ticket['can_rate'] == true) ...[
+          const SizedBox(height: 12),
+          _RatingCard(ticket: ticket, onSaved: reload),
+        ],
+        _TicketAttachments(ticket: ticket),
         if (hasInfo) ...[
           const SizedBox(height: 12),
           FieldGroup(
@@ -269,6 +275,21 @@ class _AdminTicketBodyState extends State<_AdminTicketBody> {
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
       children: [
         _TicketHeader(ticket: ticket),
+        if (ticket['rating'] != null) ...[
+          const SizedBox(height: 12),
+          FieldGroup(
+            title: s.t('requester_rating'),
+            icon: Icons.star_outline_rounded,
+            children: [
+              _Stars(value: (ticket['rating'] as num).toInt()),
+              if ((ticket['rating_comment'] ?? '').toString().isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(ticket['rating_comment'].toString(), style: const TextStyle(height: 1.5)),
+              ],
+            ],
+          ),
+        ],
+        _TicketAttachments(ticket: ticket),
         const SizedBox(height: 12),
         FieldGroup(
           title: s.t('requester'),
@@ -349,6 +370,178 @@ class _AdminTicketBodyState extends State<_AdminTicketBody> {
               label: Text(s.t('send_reply')),
             ),
           ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Photos / PDFs sent with the ticket. The files are private, so images load with the token.
+class _TicketAttachments extends StatelessWidget {
+  const _TicketAttachments({required this.ticket});
+
+  final Map<String, dynamic> ticket;
+
+  @override
+  Widget build(BuildContext context) {
+    final files = (ticket['attachments'] as List? ?? []).map((f) => Map<String, dynamic>.from(f as Map)).toList();
+    if (files.isEmpty) return const SizedBox.shrink();
+    final s = S.of(context);
+    final scheme = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: FieldGroup(
+        title: s.t('attachments'),
+        icon: Icons.attach_file_rounded,
+        children: [
+          ColumnsWrap(
+            columns: 3,
+            spacing: 8,
+            children: [
+              for (final file in files)
+                AspectRatio(
+                  aspectRatio: 1,
+                  child: Material(
+                    color: scheme.surfaceContainerHighest,
+                    clipBehavior: Clip.antiAlias,
+                    borderRadius: BorderRadius.circular(14),
+                    child: InkWell(
+                      onTap: file['is_image'] == true ? () => _open(context, file['url'].toString()) : null,
+                      child: file['is_image'] == true
+                          ? Image.network(
+                              file['url'].toString(),
+                              headers: api.authHeaders,
+                              fit: BoxFit.cover,
+                              cacheWidth: 400,
+                              errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined),
+                            )
+                          : Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.picture_as_pdf_outlined, color: scheme.primary),
+                                const SizedBox(height: 4),
+                                const Text('PDF', style: TextStyle(fontSize: 12)),
+                              ],
+                            ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _open(BuildContext context, String url) {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(backgroundColor: Colors.black, foregroundColor: Colors.white),
+        body: InteractiveViewer(
+          maxScale: 5,
+          child: Center(child: Image.network(url, headers: api.authHeaders)),
+        ),
+      ),
+    ));
+  }
+}
+
+class _Stars extends StatelessWidget {
+  const _Stars({required this.value, this.onChanged, this.size = 30});
+
+  final int value;
+  final ValueChanged<int>? onChanged;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var star = 1; star <= 5; star++)
+            GestureDetector(
+              onTap: onChanged == null ? null : () => onChanged!(star),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+                child: Icon(
+                  star <= value ? Icons.star_rounded : Icons.star_outline_rounded,
+                  size: size,
+                  color: star <= value ? const Color(0xFFF5A524) : Theme.of(context).colorScheme.outline,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shown to the requester once IT resolved or closed the ticket; a saved rating can be changed.
+class _RatingCard extends StatefulWidget {
+  const _RatingCard({required this.ticket, required this.onSaved});
+
+  final Map<String, dynamic> ticket;
+  final VoidCallback onSaved;
+
+  @override
+  State<_RatingCard> createState() => _RatingCardState();
+}
+
+class _RatingCardState extends State<_RatingCard> {
+  late int _rating = (widget.ticket['rating'] as num?)?.toInt() ?? 0;
+  late final _comment = TextEditingController(text: widget.ticket['rating_comment']?.toString() ?? '');
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _comment.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_rating == 0) return;
+    setState(() => _busy = true);
+    try {
+      await api.post('/my/tickets/${widget.ticket['id']}/rating', {
+        'rating': _rating,
+        if (_comment.text.trim().isNotEmpty) 'comment': _comment.text.trim(),
+      });
+      if (!mounted) return;
+      toast(context, S.of(context).t('rating_saved'));
+      widget.onSaved();
+    } catch (e) {
+      if (mounted) toast(context, errorText(context, e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    final rated = widget.ticket['rating'] != null;
+    return FieldGroup(
+      title: s.t(rated ? 'your_rating' : 'rate_title'),
+      hint: s.t('rate_hint'),
+      icon: Icons.star_outline_rounded,
+      children: [
+        Center(child: _Stars(value: _rating, size: 38, onChanged: (value) => setState(() => _rating = value))),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _comment,
+          minLines: 1,
+          maxLines: 4,
+          decoration: InputDecoration(hintText: s.t('rating_comment')),
+        ),
+        const SizedBox(height: 12),
+        FilledButton.icon(
+          onPressed: _busy || _rating == 0 ? null : _save,
+          icon: const Icon(Icons.send_rounded),
+          label: Text(s.t('send_rating')),
         ),
       ],
     );
