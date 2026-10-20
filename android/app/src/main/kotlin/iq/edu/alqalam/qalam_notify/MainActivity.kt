@@ -11,7 +11,9 @@ import android.os.PowerManager
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
+import androidx.core.content.FileProvider
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
 
 /**
  * Small bridge the Dart side uses to find out why a push might not show on this phone
@@ -32,6 +34,9 @@ class MainActivity : FlutterFragmentActivity() {
                 "requestIgnoreBatteryOptimizations" -> result.success(requestIgnoreBatteryOptimizations())
                 "openAutostartSettings" -> result.success(openAutostartSettings())
                 "openSoundSettings" -> result.success(openSoundSettings())
+                "updateFile" -> result.success(updateFile())
+                "installApk" -> result.success(installApk(call.argument<String>("path") ?: ""))
+                "installerSource" -> result.success(installerSource())
                 else -> result.notImplemented()
             }
         }
@@ -78,6 +83,44 @@ class MainActivity : FlutterFragmentActivity() {
             "notificationMaxVolume" to audio.getStreamMaxVolume(AudioManager.STREAM_NOTIFICATION),
             "dndFilter" to dndFilter,
         )
+    }
+
+    /** Where the update APK is downloaded to; an older download is removed first. */
+    private fun updateFile(): String {
+        val dir = File(cacheDir, "updates").apply { mkdirs() }
+        dir.listFiles()?.forEach { it.delete() }
+        return File(dir, "update.apk").absolutePath
+    }
+
+    /**
+     * Opens the system installer for the downloaded APK. It installs over the current app
+     * (same package and signing key), so data and sign-in stay. On Android 8+ the user first
+     * allows this app to install updates; the Dart side retries when they come back.
+     */
+    private fun installApk(path: String): String {
+        val file = File(path)
+        if (!file.exists()) return "failed"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+            startFirst(listOf(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName"))))
+            return "permission"
+        }
+        val uri = FileProvider.getUriForFile(this, "$packageName.updates", file)
+        val intent = Intent(Intent.ACTION_VIEW)
+            .setDataAndType(uri, "application/vnd.android.package-archive")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        return if (startFirst(listOf(intent))) "started" else "failed"
+    }
+
+    /** "com.android.vending" once the app comes from Google Play; null for a downloaded APK. */
+    private fun installerSource(): String? = try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            packageManager.getInstallSourceInfo(packageName).installingPackageName
+        } else {
+            @Suppress("DEPRECATION")
+            packageManager.getInstallerPackageName(packageName)
+        }
+    } catch (_: Exception) {
+        null
     }
 
     private fun openSoundSettings(): Boolean = startFirst(listOf(Intent(Settings.ACTION_SOUND_SETTINGS)))

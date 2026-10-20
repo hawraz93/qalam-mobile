@@ -7,7 +7,7 @@ class S {
   final String lang;
 
   /// Shown on the account page; keep in step with pubspec.yaml.
-  static const appVersion = '1.5.0';
+  static const appVersion = '1.5.1';
 
   /// Set at startup from the saved choice or the phone language. Kept apart from the
   /// Material locale because Flutter ships no Material translations for Kurdish (ckb).
@@ -298,6 +298,13 @@ class S {
       'notif_contacts': 'رسائل اتصل بنا',
       'notif_careers': 'طلبات التوظيف',
       'update_available': 'يتوفر إصدار جديد من التطبيق',
+      'update_now': 'تحديث الآن',
+      'update_downloading': 'جارٍ تنزيل التحديث…',
+      'update_ready': 'اكتمل التنزيل. أكّد التثبيت في نافذة النظام، وستبقى بياناتك كما هي.',
+      'update_permission': 'اسمح لتطبيق القلم بتثبيت التحديثات من صفحة الإعدادات التي فُتحت، ثم ارجع إلى هنا.',
+      'update_failed': 'تعذّر تنزيل التحديث. تحقّق من الاتصال وأعد المحاولة.',
+      'open_in_browser': 'فتح في المتصفح',
+      'install': 'تثبيت',
       'update_required': 'يلزم تحديث التطبيق',
       'update_required_hint': 'هذا الإصدار لم يعد مدعوماً. حمّل الإصدار الجديد وثبّته للمتابعة.',
       'download': 'تحميل',
@@ -569,6 +576,13 @@ class S {
       'notif_contacts': 'نامەکانی پەیوەندی',
       'notif_careers': 'داواکارییەکانی کار',
       'update_available': 'ڤێرژنێکی نوێی ئەپ بەردەستە',
+      'update_now': 'ئێستا نوێی بکەرەوە',
+      'update_downloading': 'نوێکردنەوەکە دادەبەزێت…',
+      'update_ready': 'داگرتن تەواو بوو. لە پەنجەرەی سیستەمدا دامەزراندن پشتڕاست بکەرەوە، داتاکانت وەک خۆیان دەمێنن.',
+      'update_permission': 'لەو پەڕەی ڕێکخستنەی کرایەوە ڕێگە بە ئەپی قەڵەم بدە نوێکردنەوە دابمەزرێنێت، پاشان بگەڕێوە ئێرە.',
+      'update_failed': 'نوێکردنەوەکە دانەبەزی. پەیوەندی ئینتەرنێت بپشکنە و دووبارە هەوڵبدەوە.',
+      'open_in_browser': 'کردنەوە لە وێبگەڕ',
+      'install': 'دامەزراندن',
       'update_required': 'پێویستە ئەپەکە نوێ بکرێتەوە',
       'update_required_hint': 'ئەم ڤێرژنە چیتر پشتگیری ناکرێت. ڤێرژنی نوێ دابگرە و دایبمەزرێنە بۆ بەردەوامبوون.',
       'download': 'داگرتن',
@@ -840,6 +854,13 @@ class S {
       'notif_contacts': 'Contact form messages',
       'notif_careers': 'Job applications',
       'update_available': 'A new version of the app is available',
+      'update_now': 'Update now',
+      'update_downloading': 'Downloading the update…',
+      'update_ready': 'Download complete. Confirm the install in the system window; your data stays as it is.',
+      'update_permission': 'Allow Al-Qalam to install updates on the settings page that opened, then come back here.',
+      'update_failed': 'Could not download the update. Check the connection and try again.',
+      'open_in_browser': 'Open in browser',
+      'install': 'Install',
       'update_required': 'Update required',
       'update_required_hint': 'This version is no longer supported. Download and install the new version to continue.',
       'download': 'Download',

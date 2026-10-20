@@ -17,6 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the previous tag, for the build-number check
 
       - uses: actions/setup-java@v4
         with:
@@ -36,6 +38,20 @@ jobs:
           echo "tag=$TAG pubspec=$PUBSPEC"
           if [ "$TAG" != "$PUBSPEC" ]; then
             echo "::error::Tag v$TAG does not match pubspec.yaml version $PUBSPEC"
+            exit 1
+          fi
+
+      # Android only installs an update over the current app when the build number (after +)
+      # is higher; otherwise people would have to uninstall first.
+      - name: Check the build number went up
+        run: |
+          PREV=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)
+          if [ -z "$PREV" ]; then exit 0; fi
+          OLD=$(git show "$PREV:pubspec.yaml" | grep -E '^version:' | sed -E 's/.*\+([0-9]+).*/\1/')
+          NEW=$(grep -E '^version:' pubspec.yaml | sed -E 's/.*\+([0-9]+).*/\1/')
+          echo "previous=$PREV build=$OLD, now build=$NEW"
+          if [ "$NEW" -le "$OLD" ]; then
+            echo "::error::Build number $NEW must be higher than $OLD ($PREV); raise the number after + in pubspec.yaml"
             exit 1
           fi
 
