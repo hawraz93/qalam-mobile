@@ -1,7 +1,7 @@
 name: qalam_notify
 description: Al-Qalam University staff notifications app.
 publish_to: "none"
-version: 1.8.0+11
+version: 1.8.1+12
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -24,6 +24,7 @@ dependencies:
   package_info_plus: ^10.2.2
   crypto: ^3.0.7
   image_picker: ^1.1.2
+  firebase_crashlytics: ^5.4.0
 
 dev_dependencies:
   flutter_test:

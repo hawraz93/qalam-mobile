@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'api.dart';
+import 'crash.dart';
 import 'lock.dart';
 import 'push.dart';
 import 'screens/account.dart';
@@ -35,6 +36,8 @@ Future<void> main() async {
 
   await AppLock.load();
   await Push.init();
+  await CrashReports.init();
+  CrashReports.setUser(api.user);
   runApp(const QalamApp());
 }
 

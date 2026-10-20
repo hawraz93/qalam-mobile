@@ -22,6 +22,8 @@ val hasReleaseKey = keystoreProperties.getProperty("storeFile") != null
 // into android/app — downloaded from Firebase Console → Project settings → Your apps.
 if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
+    // Crash reports (Firebase Crashlytics)
+    apply(plugin = "com.google.firebase.crashlytics")
 }
 
 android {

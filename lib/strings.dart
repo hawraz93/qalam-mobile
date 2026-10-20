@@ -7,7 +7,7 @@ class S {
   final String lang;
 
   /// Shown on the account page; keep in step with pubspec.yaml.
-  static const appVersion = '1.8.0';
+  static const appVersion = '1.8.1';
 
   /// Set at startup from the saved choice or the phone language. Kept apart from the
   /// Material locale because Flutter ships no Material translations for Kurdish (ckb).

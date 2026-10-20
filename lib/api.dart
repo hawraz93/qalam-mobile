@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
+import 'crash.dart';
 import 'strings.dart';
 
 class ApiException implements Exception {
@@ -27,7 +28,14 @@ class Api {
   final _storage = const FlutterSecureStorage();
 
   String? _token;
-  Map<String, dynamic>? user;
+  Map<String, dynamic>? _user;
+
+  /// The signed-in account; setting it also labels crash reports with the account id.
+  Map<String, dynamic>? get user => _user;
+  set user(Map<String, dynamic>? value) {
+    _user = value;
+    CrashReports.setUser(value);
+  }
 
   /// Swapped for a fake in the screenshot tests (test/screens_test.dart).
   http.Client client = http.Client();
