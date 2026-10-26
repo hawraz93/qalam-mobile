@@ -7,7 +7,7 @@ class S {
   final String lang;
 
   /// Shown on the account page; keep in step with pubspec.yaml.
-  static const appVersion = '1.9.0';
+  static const appVersion = '1.9.1';
 
   /// Set at startup from the saved choice or the phone language. Kept apart from the
   /// Material locale because Flutter ships no Material translations for Kurdish (ckb).
@@ -84,6 +84,14 @@ class S {
       'reopen': 'إعادة فتح',
       'no_email': 'لا يوجد بريد إلكتروني للرد',
       'attachments': 'المرفقات',
+      'take_ticket': 'استلام التذكرة',
+      'ticket_taken': 'استلمت التذكرة',
+      'mark_resolved': 'تم الحل',
+      'change_status': 'تغيير الحالة',
+      'more_actions': 'المزيد',
+      'resolve_after_reply': 'اعتبرها محلولة بعد الإرسال',
+      'it_notes_hint': 'لا يراها صاحب التذكرة إلا في تفاصيلها.',
+      'ticket_overdue_banner': 'متأخرة: لم يستلمها أحد ضمن مهلة الرد',
       'account_off': 'موقوف',
       'teachers_admin': 'التدريسيون',
       'pending_teachers': 'تدريسيون بانتظار الموافقة',
@@ -510,6 +518,14 @@ class S {
       'reopen': 'کردنەوەی دووبارە',
       'no_email': 'ئیمەیڵ نییە بۆ وەڵامدانەوە',
       'attachments': 'هاوپێچەکان',
+      'take_ticket': 'وەرگرتنی تیکێت',
+      'ticket_taken': 'تیکێتەکە وەرگیرا',
+      'mark_resolved': 'چارەسەر کرا',
+      'change_status': 'گۆڕینی دۆخ',
+      'more_actions': 'زیاتر',
+      'resolve_after_reply': 'دوای ناردن وەک چارەسەرکراو دابنێ',
+      'it_notes_hint': 'خاوەنی تیکێتەکە تەنها لە وردەکارییەکاندا دەیبینێت.',
+      'ticket_overdue_banner': 'دواکەوتووە: کەس لە ماوەی دیاریکراودا وەری نەگرتووە',
       'account_off': 'ناچالاک',
       'teachers_admin': 'مامۆستایان',
       'pending_teachers': 'مامۆستای چاوەڕوان',
@@ -936,6 +952,14 @@ class S {
       'reopen': 'Reopen',
       'no_email': 'No email address to reply to',
       'attachments': 'Attachments',
+      'take_ticket': 'Take ticket',
+      'ticket_taken': 'Ticket taken',
+      'mark_resolved': 'Resolved',
+      'change_status': 'Change status',
+      'more_actions': 'More',
+      'resolve_after_reply': 'Mark resolved after sending',
+      'it_notes_hint': 'The requester sees this only in the ticket details.',
+      'ticket_overdue_banner': 'Overdue: nobody picked it up within the response time',
       'account_off': 'Switched off',
       'teachers_admin': 'Teachers',
       'pending_teachers': 'Teachers waiting',

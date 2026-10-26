@@ -100,6 +100,7 @@ final Map<String, dynamic> _ticketDetail = {
     {'url': 'https://example.com/a.pdf', 'filename': 'error-report.pdf', 'is_image': false},
   ],
   'rating': null,
+  'overdue_minutes': 35,
 };
 
 final Map<String, dynamic> _myTicketDetail = {

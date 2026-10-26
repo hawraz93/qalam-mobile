@@ -229,6 +229,9 @@ class _MyTicketBody extends StatelessWidget {
   }
 }
 
+/// IT desk view of one ticket: what it is and who asked, then one obvious next step
+/// for its state (take it → reply / resolve → reopen). Everything else (any status,
+/// IT note) is under "More", so the screen stays short.
 class _AdminTicketBody extends StatefulWidget {
   const _AdminTicketBody({required this.ticket, required this.reload});
 
@@ -240,17 +243,11 @@ class _AdminTicketBody extends StatefulWidget {
 }
 
 class _AdminTicketBodyState extends State<_AdminTicketBody> {
-  late String _status = widget.ticket['status']?.toString() ?? 'open';
-  late final _notes = TextEditingController(text: widget.ticket['it_notes']?.toString() ?? '');
-  final _reply = TextEditingController();
   bool _busy = false;
 
-  @override
-  void dispose() {
-    _notes.dispose();
-    _reply.dispose();
-    super.dispose();
-  }
+  int get _id => widget.ticket['id'] as int;
+  String get _status => widget.ticket['status']?.toString() ?? 'open';
+  String get _notes => widget.ticket['it_notes']?.toString() ?? '';
 
   Future<void> _run(Future<void> Function() action, String doneKey) async {
     setState(() => _busy = true);
@@ -266,113 +263,332 @@ class _AdminTicketBodyState extends State<_AdminTicketBody> {
     }
   }
 
+  Future<void> _setStatus(String status, {String? notes}) =>
+      api.patch('/tickets/$_id', {'status': status, 'it_notes': notes ?? _notes});
+
+  /// Assign to me and start working on it, in one tap.
+  void _take() => _run(() async {
+        await api.post('/tickets/$_id/assign');
+        await _setStatus('in_progress');
+      }, 'ticket_taken');
+
+  Future<void> _reply() async {
+    final sent = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (_) => _ReplySheet(id: _id, status: _status, notes: _notes),
+    );
+    if (sent == true) {
+      if (mounted) toast(context, S.of(context).t('reply_sent'));
+      widget.reload();
+    }
+  }
+
+  Future<void> _more() async {
+    final s = S.of(context);
+    final mine = widget.ticket['assignee'] != null && widget.ticket['assignee'] == api.user?['name'];
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(leading: const Icon(Icons.reply_rounded), title: Text(s.t('reply')), onTap: () => Navigator.pop(context, 'reply')),
+            ListTile(leading: const Icon(Icons.sticky_note_2_outlined), title: Text(s.t('it_notes')), onTap: () => Navigator.pop(context, 'note')),
+            if (!mine)
+              ListTile(leading: const Icon(Icons.person_add_alt), title: Text(s.t('assign_me')), onTap: () => Navigator.pop(context, 'assign')),
+            const Divider(height: 8),
+            Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(20, 8, 20, 4),
+              child: Align(alignment: AlignmentDirectional.centerStart, child: Text(s.t('change_status'), style: Theme.of(context).textTheme.labelLarge)),
+            ),
+            for (final status in const ['open', 'in_progress', 'resolved', 'closed'])
+              ListTile(
+                dense: true,
+                leading: Icon(status == _status ? Icons.radio_button_checked : Icons.radio_button_unchecked, color: statusColor(status)),
+                title: Text(s.t(status)),
+                onTap: () => Navigator.pop(context, 'status:$status'),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+
+    if (choice == 'reply') return _reply();
+    if (choice == 'assign') return _run(() => api.post('/tickets/$_id/assign'), 'saved');
+    if (choice == 'note') return _editNote();
+    final status = choice.substring('status:'.length);
+    if (status != _status) _run(() => _setStatus(status), 'saved');
+  }
+
+  Future<void> _editNote() async {
+    final s = S.of(context);
+    final controller = TextEditingController(text: _notes);
+    final save = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (context) => Padding(
+        padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(s.t('it_notes'), style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(s.t('it_notes_hint'), style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 12),
+            TextField(controller: controller, autofocus: true, minLines: 3, maxLines: 8),
+            const SizedBox(height: 12),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(s.t('save'))),
+          ],
+        ),
+      ),
+    );
+    final text = controller.text;
+    controller.dispose();
+    if (save == true) _run(() => _setStatus(_status, notes: text), 'saved');
+  }
+
+  Future<void> _launch(Uri uri) async {
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
+      toast(context, S.of(context).t('cannot_open'));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
+    final scheme = Theme.of(context).colorScheme;
     final ticket = widget.ticket;
-    final id = ticket['id'];
+    final phone = ticket['requester_phone']?.toString() ?? '';
+    final email = ticket['requester_email']?.toString() ?? '';
+    final overdue = (ticket['overdue_minutes'] as num?)?.toInt();
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+    final actions = switch (_status) {
+      'open' => [
+          Expanded(
+            child: FilledButton.icon(
+              onPressed: _busy ? null : _take,
+              icon: const Icon(Icons.pan_tool_alt_outlined),
+              label: Text(s.t('take_ticket')),
+            ),
+          ),
+        ],
+      'in_progress' => [
+          Expanded(
+            child: FilledButton.tonalIcon(onPressed: _busy ? null : _reply, icon: const Icon(Icons.reply_rounded), label: Text(s.t('reply'))),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(backgroundColor: Tone.success),
+              onPressed: _busy ? null : () => _run(() => _setStatus('resolved'), 'saved'),
+              icon: const Icon(Icons.check_rounded),
+              label: Text(s.t('mark_resolved')),
+            ),
+          ),
+        ],
+      _ => [
+          Expanded(
+            child: FilledButton.tonalIcon(
+              onPressed: _busy ? null : () => _run(() => _setStatus('in_progress'), 'saved'),
+              icon: const Icon(Icons.replay_rounded),
+              label: Text(s.t('reopen')),
+            ),
+          ),
+        ],
+    };
+
+    return Column(
       children: [
-        _TicketHeader(ticket: ticket),
-        if (ticket['rating'] != null) ...[
-          const SizedBox(height: 12),
-          FieldGroup(
-            title: s.t('requester_rating'),
-            icon: Icons.star_outline_rounded,
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
             children: [
-              _Stars(value: (ticket['rating'] as num).toInt()),
-              if ((ticket['rating_comment'] ?? '').toString().isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(ticket['rating_comment'].toString(), style: const TextStyle(height: 1.5)),
+              if (overdue != null)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(color: Tone.danger.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(14)),
+                  child: Row(children: [
+                    const Icon(Icons.alarm_rounded, color: Tone.danger, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(s.t('ticket_overdue_banner'), style: const TextStyle(color: Tone.danger, fontWeight: FontWeight.w600))),
+                  ]),
+                ),
+              _TicketHeader(ticket: ticket),
+              const SizedBox(height: 12),
+              // Who asked, in one row, with call / email at hand
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+                  child: Row(children: [
+                    Avatar(name: ticket['requester_name']?.toString() ?? '', size: 42),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(ticket['requester_name']?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w700)),
+                        if ((ticket['department_name'] ?? '').toString().isNotEmpty)
+                          Text(ticket['department_name'].toString(),
+                              maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
+                      ]),
+                    ),
+                    if (phone.isNotEmpty)
+                      IconButton(
+                        tooltip: s.t('call'),
+                        onPressed: () => _launch(Uri(scheme: 'tel', path: phone)),
+                        icon: const Icon(Icons.call_outlined, color: Tone.success),
+                      ),
+                    if (email.isNotEmpty)
+                      IconButton(
+                        tooltip: s.t('send_email'),
+                        onPressed: () => _launch(Uri(scheme: 'mailto', path: email, query: 'subject=${Uri.encodeComponent(ticket['ticket_no']?.toString() ?? '')}')),
+                        icon: Icon(Icons.mail_outline_rounded, color: scheme.primary),
+                      ),
+                  ]),
+                ),
+              ),
+              // Only what has been filled in: assignee and IT note
+              if (ticket['assignee'] != null || _notes.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                FieldGroup(
+                  title: s.t('it_team'),
+                  icon: Icons.support_agent_rounded,
+                  children: [
+                    InfoRow(s.t('assignee'), ticket['assignee'], icon: Icons.engineering_outlined),
+                    InfoRow(s.t('it_notes'), _notes.isEmpty ? null : _notes, icon: Icons.sticky_note_2_outlined),
+                  ],
+                ),
+              ],
+              _TicketAttachments(ticket: ticket),
+              if (ticket['rating'] != null) ...[
+                const SizedBox(height: 12),
+                FieldGroup(
+                  title: s.t('requester_rating'),
+                  icon: Icons.star_outline_rounded,
+                  children: [
+                    _Stars(value: (ticket['rating'] as num).toInt()),
+                    if ((ticket['rating_comment'] ?? '').toString().isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(ticket['rating_comment'].toString(), style: const TextStyle(height: 1.5)),
+                    ],
+                  ],
+                ),
               ],
             ],
           ),
-        ],
-        _TicketAttachments(ticket: ticket),
-        const SizedBox(height: 12),
-        FieldGroup(
-          title: s.t('requester'),
-          icon: Icons.person_outline_rounded,
-          children: [
-            InfoRow(s.t('name'), ticket['requester_name'], icon: Icons.badge_outlined),
-            InfoRow(s.t('department'), ticket['department_name'], icon: Icons.account_tree_outlined),
-            InfoRow(s.t('email'), ticket['requester_email'], icon: Icons.alternate_email),
-            InfoRow(s.t('phone'), ticket['requester_phone'], icon: Icons.phone_outlined),
-            const Divider(height: 20),
-            Row(
-              children: [
-                Expanded(child: InfoRow(s.t('assignee'), ticket['assignee'] ?? '—', icon: Icons.engineering_outlined)),
-                FilledButton.tonalIcon(
-                  style: FilledButton.styleFrom(minimumSize: const Size(0, 40)),
-                  onPressed: _busy ? null : () => _run(() => api.post('/tickets/$id/assign'), 'saved'),
-                  icon: const Icon(Icons.person_add_alt, size: 18),
-                  label: Text(s.t('assign_me')),
+        ),
+        // The next step for this state, always in reach; the rest under "More"
+        Material(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              child: Row(children: [
+                ...actions,
+                const SizedBox(width: 8),
+                IconButton.filledTonal(
+                  tooltip: s.t('more_actions'),
+                  onPressed: _busy ? null : _more,
+                  icon: _busy
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.more_horiz_rounded),
                 ),
-              ],
+              ]),
             ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        FieldGroup(
-          title: s.t('status'),
-          icon: Icons.flag_outlined,
-          children: [
-            ColumnsWrap(
-              columns: 2,
-              spacing: 8,
-              children: [
-                for (final status in const ['open', 'in_progress', 'resolved', 'closed'])
-                  ChoiceTile(
-                    label: s.t(status),
-                    color: statusColor(status),
-                    selected: _status == status,
-                    onTap: () => setState(() => _status = status),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _notes,
-              minLines: 2,
-              maxLines: 5,
-              decoration: InputDecoration(labelText: s.t('it_notes'), alignLabelWithHint: true),
-            ),
-            const SizedBox(height: 12),
-            FilledButton(
-              onPressed: _busy
-                  ? null
-                  : () => _run(() => api.patch('/tickets/$id', {'status': _status, 'it_notes': _notes.text}), 'saved'),
-              child: Text(s.t('save')),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        FieldGroup(
-          title: s.t('reply'),
-          icon: Icons.reply_rounded,
-          children: [
-            TextField(
-              controller: _reply,
-              minLines: 3,
-              maxLines: 8,
-              decoration: InputDecoration(hintText: s.t('reply_hint')),
-            ),
-            const SizedBox(height: 12),
-            FilledButton.icon(
-              onPressed: _busy
-                  ? null
-                  : () {
-                      if (_reply.text.trim().length < 5) return;
-                      _run(() => api.post('/tickets/$id/reply', {'message': _reply.text.trim()}), 'reply_sent');
-                    },
-              icon: const Icon(Icons.send_rounded),
-              label: Text(s.t('send_reply')),
-            ),
-          ],
+          ),
         ),
       ],
+    );
+  }
+}
+
+/// Reply to the requester (email + app notification), optionally closing the matter.
+class _ReplySheet extends StatefulWidget {
+  const _ReplySheet({required this.id, required this.status, required this.notes});
+
+  final int id;
+  final String status;
+  final String notes;
+
+  @override
+  State<_ReplySheet> createState() => _ReplySheetState();
+}
+
+class _ReplySheetState extends State<_ReplySheet> {
+  final _text = TextEditingController();
+  late bool _resolve = widget.status == 'in_progress';
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    if (_text.text.trim().length < 5) {
+      toast(context, S.of(context).t('required'));
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await api.post('/tickets/${widget.id}/reply', {'message': _text.text.trim()});
+      if (_resolve) {
+        await api.patch('/tickets/${widget.id}', {'status': 'resolved', 'it_notes': widget.notes});
+      }
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) toast(context, errorText(context, e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(s.t('reply'), style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _text,
+            autofocus: true,
+            minLines: 4,
+            maxLines: 10,
+            decoration: InputDecoration(hintText: s.t('reply_hint')),
+          ),
+          if (widget.status != 'resolved' && widget.status != 'closed')
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              value: _resolve,
+              onChanged: (v) => setState(() => _resolve = v ?? false),
+              title: Text(s.t('resolve_after_reply')),
+            ),
+          const SizedBox(height: 8),
+          FilledButton.icon(
+            onPressed: _busy ? null : _send,
+            icon: _busy
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.send_rounded),
+            label: Text(s.t('send_reply')),
+          ),
+        ],
+      ),
     );
   }
 }
