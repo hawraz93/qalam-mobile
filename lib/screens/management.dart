@@ -5,6 +5,7 @@ import '../strings.dart';
 import '../widgets.dart';
 import 'admin_tools.dart';
 import 'announcements.dart';
+import 'teachers_admin.dart';
 import 'web_page.dart';
 import 'work.dart' show WorkShortcut;
 
@@ -58,6 +59,7 @@ List<Widget> _links(BuildContext context, Map<String, dynamic> data, VoidCallbac
   return [
     if (api.can('activity')) link(Icons.query_stats_rounded, s.t('website_visits'), 0, const VisitsScreen()),
     if (api.can('activity')) link(Icons.history_rounded, s.t('activity_log'), 0, const ActivityLogScreen()),
+    if (api.can('teachers')) link(Icons.school_outlined, s.t('teachers_admin'), n('teachers', 'pending'), const TeachersAdminScreen()),
     if (api.can('users')) link(Icons.manage_accounts_outlined, s.t('users_roles'), 0, const UsersScreen()),
     if (api.can('users')) link(Icons.person_add_alt_1_outlined, s.t('pending_users'), n('accounts', 'pending'), const PendingUsersScreen()),
     if (api.can('careers')) link(Icons.work_outline_rounded, s.t('job_applications'), n('careers', 'new'), const ApplicationsScreen()),

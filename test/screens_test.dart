@@ -18,6 +18,7 @@ import 'package:qalam_notify/api.dart';
 import 'package:qalam_notify/main.dart';
 import 'package:qalam_notify/screens/account.dart';
 import 'package:qalam_notify/screens/admin_tools.dart';
+import 'package:qalam_notify/screens/teachers_admin.dart';
 import 'package:qalam_notify/screens/announcements.dart';
 import 'package:qalam_notify/screens/directory.dart';
 import 'package:qalam_notify/screens/management.dart';
@@ -47,7 +48,7 @@ final Map<String, dynamic> _user = {
   'department': 'قسم تقنيات المعلومات',
   'department_id': 85,
   'created_at': '2024-02-11T09:00:00+03:00',
-  'can': {'it_tickets': true, 'complaints': true, 'contacts': true, 'careers': true, 'announcements': true, 'management': true, 'users': true, 'activity': true},
+  'can': {'it_tickets': true, 'complaints': true, 'contacts': true, 'careers': true, 'announcements': true, 'management': true, 'users': true, 'activity': true, 'teachers': true},
   'teacher': {
     'name_ar': 'هاوراز نوزاد',
     'name_en': 'Hawraz Nawzad',
@@ -214,6 +215,14 @@ final _fakeServer = MockClient((request) async {
         {'id': 3, 'description': 'Failed login attempt', 'event': 'failed_login', 'subject': null, 'causer': null, 'ip': '91.200.1.7', 'source': null, 'created_at': _ago(const Duration(hours: 2))},
         {'id': 4, 'description': 'Post deleted: الإعلان القديم', 'event': 'delete', 'subject': 'posts', 'causer': {'id': 3, 'name': 'ئاراس'}, 'ip': '10.0.0.8', 'source': null, 'created_at': _ago(const Duration(hours: 5))},
       ])),
+    '/admin/teachers' => _json(_page([
+        {'id': 31, 'name': 'د. سيروان أحمد', 'title': 'مدرس', 'department': 'كلية التربية', 'status': 'pending', 'created_at': _ago(const Duration(hours: 3))},
+        {'id': 32, 'name': 'م. لانە عمر', 'title': 'مدرس مساعد', 'department': 'اللغة الانكليزية', 'status': 'pending', 'created_at': _ago(const Duration(days: 2))},
+      ])),
+    '/admin/teachers/33' => _json({'data': {'id': 33, 'name': 'د. كاوە فرج', 'name_en': 'Dr. Kawa Faraj', 'title': 'أستاذ مساعد', 'degree': 'Ph.D', 'department': 'إدارة الأعمال', 'specialty': 'إدارة', 'phone': '07701112233', 'status': 'left', 'left_at': '2026-10-01', 'left_reason': 'انتقل إلى جامعة أخرى', 'left_by': 'هاوڕاز نەوزاد', 'account': {'id': 50, 'email': 'kawa@alqalam.edu.iq', 'is_active': false}, 'web_path': '/teacher/33', 'history': [
+        {'event': 'teacher_left', 'by': 'هاوڕاز نەوزاد', 'reason': 'انتقل إلى جامعة أخرى', 'created_at': _ago(const Duration(days: 25))},
+        {'event': 'teacher_activated', 'by': 'هاوڕاز نەوزاد', 'reason': null, 'created_at': _ago(const Duration(days: 400))},
+      ]}}),
     '/users' => _json(_page([
         {'id': 21, 'name': 'سارا عەلی', 'email': 'sara@alqalam.edu.iq', 'department': 'شعبة الرواتب', 'roles': ['Teacher'], 'is_active': true},
         {'id': 22, 'name': 'ڕێبین سەعید', 'email': 'rebin@alqalam.edu.iq', 'department': 'كلية التربية', 'roles': ['Employee'], 'is_active': false},
@@ -312,5 +321,7 @@ void main() {
   screen('19_activity', () => const ActivityLogScreen());
   screen('20_users', () => const UsersScreen());
   screen('21_user', () => const UserDetailScreen(id: 21));
+  screen('22_teachers', () => const TeachersAdminScreen());
+  screen('23_teacher_left', () => const TeacherAdminDetailScreen(id: 33));
   screen('07_account', () => Scaffold(body: AccountTab(onSignedOut: () {}, onLanguageChanged: () {})));
 }

@@ -8,6 +8,7 @@ import 'announcements.dart';
 import 'directory.dart';
 import 'inbox.dart' show NotificationCard;
 import 'management.dart';
+import 'teachers_admin.dart';
 import 'portfolio.dart';
 import 'teacher.dart';
 import 'ticket_form.dart';
@@ -90,7 +91,8 @@ class HomeTabState extends State<HomeTab> {
     void push(Widget screen) =>
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen)).then((_) => refresh());
     final managementScreen = ManagementScreen(onOpenWork: (section) => widget.onOpenTab('work', section: section));
-    final hasManagement = api.can('management') || api.can('users') || api.can('careers') || api.can('activity');
+    final hasManagement =
+        api.can('management') || api.can('users') || api.can('careers') || api.can('activity') || api.can('teachers');
 
     final stats = <Widget>[
       StatCell(
@@ -146,6 +148,14 @@ class HomeTabState extends State<HomeTab> {
           color: Tone.info,
           onTap: () => push(const PendingUsersScreen()),
         ),
+      if (api.can('teachers'))
+        StatCell(
+          icon: Icons.school_outlined,
+          label: s.t('pending_teachers'),
+          value: count('pending_teachers'),
+          color: Tone.warning,
+          onTap: () => push(const TeachersAdminScreen()),
+        ),
       if (api.can('careers'))
         StatCell(
           icon: Icons.work_outline_rounded,
@@ -163,6 +173,7 @@ class HomeTabState extends State<HomeTab> {
       if (api.can('complaints')) 'complaints',
       if (api.can('contacts')) 'contacts',
       if (api.can('users')) 'pending_users',
+      if (api.can('teachers')) 'pending_teachers',
       if (api.can('careers')) 'new_applications',
     ].fold(0, (sum, key) => sum + count(key));
 
