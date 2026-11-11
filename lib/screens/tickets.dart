@@ -22,7 +22,7 @@ class _TicketTile extends StatelessWidget {
     return ItemCard(
       icon: attention ? Icons.mark_email_unread_outlined : Icons.confirmation_number_outlined,
       title: ticket['title']?.toString() ?? '',
-      subtitle: '${ticket['ticket_no']}${admin ? ' · ${ticket['requester_name']}' : ''}',
+      subtitle: '${ltr(ticket['ticket_no'])}${admin ? ' · ${ticket['requester_name']}' : ''}',
       trailing: relativeDate(context, ticket['created_at']),
       unread: attention || (!admin && status == 'open'),
       accent: statusColor(status),
@@ -90,7 +90,54 @@ class _MyTicketsTabState extends State<MyTicketsTab> {
   }
 }
 
-/// IT team desk.
+/// "2026-00116" / "2026-11-11" kept left-to-right inside Arabic / Kurdish text.
+String ltr(Object? text) => '\u2066${text ?? ''}\u2069';
+
+String _ymd(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+/// Statuses each desk tab holds; the status filter only offers these.
+const _tabStatuses = {
+  'active': ['open', 'in_progress'],
+  'archived': ['resolved', 'closed'],
+  'all': ['open', 'in_progress', 'resolved', 'closed'],
+};
+const _priorities = ['low', 'medium', 'high', 'urgent'];
+const _categories = ['hardware', 'software', 'network', 'account', 'printer', 'other'];
+
+/// The desk's narrowing filters (the tab and search sit outside).
+class _TicketFilters {
+  const _TicketFilters({this.status = '', this.priority = '', this.category = '', this.from, this.to});
+
+  final String status;
+  final String priority;
+  final String category;
+  final DateTime? from;
+  final DateTime? to;
+
+  int get count => [status.isNotEmpty, priority.isNotEmpty, category.isNotEmpty, from != null, to != null].where((on) => on).length;
+
+  Map<String, String> get query => {
+        if (status.isNotEmpty) 'status': status,
+        if (priority.isNotEmpty) 'priority': priority,
+        if (category.isNotEmpty) 'category': category,
+        if (from != null) 'minDate': _ymd(from!),
+        if (to != null) 'maxDate': _ymd(to!),
+      };
+
+  /// Drops a status the new tab cannot have (the server would ignore it anyway).
+  _TicketFilters forTab(String tab) =>
+      (_tabStatuses[tab] ?? const []).contains(status) ? this : _TicketFilters(priority: priority, category: category, from: from, to: to);
+
+  _TicketFilters without(String key) => _TicketFilters(
+        status: key == 'status' ? '' : status,
+        priority: key == 'priority' ? '' : priority,
+        category: key == 'category' ? '' : category,
+        from: key == 'from' ? null : from,
+        to: key == 'to' ? null : to,
+      );
+}
+
+/// IT team desk: active / resolved & closed / all, with search, filters and printing.
 class AdminTicketsTab extends StatefulWidget {
   const AdminTicketsTab({super.key});
 
@@ -99,26 +146,116 @@ class AdminTicketsTab extends StatefulWidget {
 }
 
 class _AdminTicketsTabState extends State<AdminTicketsTab> {
-  String _tab = 'attention';
+  String _tab = 'active';
   String _search = '';
+  _TicketFilters _filters = const _TicketFilters();
+  Map<String, int>? _counts;
+  String? _printUrl;
+
+  void _loaded(Map<String, dynamic> body) {
+    final counts = body['counts'];
+    setState(() {
+      if (counts is Map) {
+        _counts = {for (final e in counts.entries) e.key.toString(): (e.value as num?)?.toInt() ?? 0};
+      }
+      _printUrl = body['print_url']?.toString();
+    });
+  }
+
+  Future<void> _openFilters() async {
+    final picked = await showModalBottomSheet<_TicketFilters>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (_) => _FiltersSheet(tab: _tab, initial: _filters),
+    );
+    if (picked != null) setState(() => _filters = picked);
+  }
 
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
+    final f = _filters;
+    final scheme = Theme.of(context).colorScheme;
 
     return Column(
       children: [
         FilterBar(
-          segments: {'attention': s.t('attention'), 'active': s.t('active'), 'archived': s.t('archived')},
+          segments: {
+            'active': s.t('active'),
+            'archived': s.t('tickets_resolved_closed'),
+            'all': s.t('all'),
+            'attention': s.t('attention'),
+          },
+          counts: _counts,
           selected: _tab,
-          onChanged: (value) => setState(() => _tab = value),
+          onChanged: (value) => setState(() {
+            _tab = value;
+            _filters = _filters.forTab(value);
+          }),
         ),
-        SearchField(onChanged: (value) => setState(() => _search = value)),
+        Row(
+          children: [
+            Expanded(child: SearchField(onChanged: (value) => setState(() => _search = value))),
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: IconButton(
+                tooltip: s.t('filters'),
+                onPressed: _openFilters,
+                icon: Badge(
+                  isLabelVisible: f.count > 0,
+                  label: Text('${f.count}'),
+                  child: Icon(Icons.tune_rounded, color: f.count > 0 ? scheme.primary : null),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsetsDirectional.only(top: 4, end: 8),
+              child: IconButton(
+                tooltip: s.t('print_list'),
+                onPressed: _printUrl == null ? null : () => openExternal(context, _printUrl!),
+                icon: const Icon(Icons.print_outlined),
+              ),
+            ),
+          ],
+        ),
+        if (f.count > 0)
+          SizedBox(
+            height: 44,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+              children: [
+                for (final chip in [
+                  if (f.status.isNotEmpty) ('status', s.t(f.status)),
+                  if (f.priority.isNotEmpty) ('priority', s.t(f.priority)),
+                  if (f.category.isNotEmpty) ('category', s.t('cat_${f.category}')),
+                  if (f.from != null) ('from', '${s.t('from_date')} ${ltr(_ymd(f.from!))}'),
+                  if (f.to != null) ('to', '${s.t('to_date')} ${ltr(_ymd(f.to!))}'),
+                ])
+                  Padding(
+                    padding: const EdgeInsetsDirectional.only(end: 6),
+                    child: InputChip(
+                      label: Text(chip.$2, style: const TextStyle(fontSize: 12)),
+                      visualDensity: VisualDensity.compact,
+                      onDeleted: () => setState(() => _filters = _filters.without(chip.$1)),
+                    ),
+                  ),
+                TextButton.icon(
+                  onPressed: () => setState(() => _filters = const _TicketFilters()),
+                  icon: const Icon(Icons.filter_alt_off_outlined, size: 18),
+                  label: Text(s.t('clear_filters')),
+                ),
+              ],
+            ),
+          ),
         Expanded(
           child: PagedList(
             path: '/tickets',
-            query: {'tab': _tab, if (_search.isNotEmpty) 'search': _search},
+            query: {'tab': _tab, if (_search.isNotEmpty) 'search': _search, ...f.query},
             emptyIcon: Icons.confirmation_number_outlined,
+            onLoaded: _loaded,
             itemBuilder: (context, ticket, refresh) => _TicketTile(ticket: ticket, admin: true, onChanged: refresh),
           ),
         ),
@@ -127,20 +264,165 @@ class _AdminTicketsTabState extends State<AdminTicketsTab> {
   }
 }
 
-class TicketDetailScreen extends StatelessWidget {
+/// Status (for the current tab), priority, category and a date range.
+class _FiltersSheet extends StatefulWidget {
+  const _FiltersSheet({required this.tab, required this.initial});
+
+  final String tab;
+  final _TicketFilters initial;
+
+  @override
+  State<_FiltersSheet> createState() => _FiltersSheetState();
+}
+
+class _FiltersSheetState extends State<_FiltersSheet> {
+  late String _status = widget.initial.status;
+  late String _priority = widget.initial.priority;
+  late String _category = widget.initial.category;
+  late DateTime? _from = widget.initial.from;
+  late DateTime? _to = widget.initial.to;
+
+  Future<DateTime?> _pickDate(DateTime? current) => showDatePicker(
+        context: context,
+        initialDate: current ?? DateTime.now(),
+        firstDate: DateTime(2020),
+        lastDate: DateTime.now().add(const Duration(days: 1)),
+      );
+
+  Widget _choices(String title, String allLabel, List<String> values, String selected, String Function(String) label, ValueChanged<String> onPick) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: Theme.of(context).textTheme.labelLarge),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              ChoiceChip(label: Text(allLabel), selected: selected.isEmpty, onSelected: (_) => onPick('')),
+              for (final value in values)
+                ChoiceChip(label: Text(label(value)), selected: selected == value, onSelected: (_) => onPick(value)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    final statuses = _tabStatuses[widget.tab] ?? const <String>[];
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(s.t('filters'), style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 12),
+          if (statuses.isNotEmpty)
+            _choices(s.t('status'), s.t('all_statuses'), statuses, _status, s.t, (v) => setState(() => _status = v)),
+          _choices(s.t('priority'), s.t('all_priorities'), _priorities, _priority, s.t, (v) => setState(() => _priority = v)),
+          _choices(s.t('category'), s.t('all_categories'), _categories, _category, (v) => s.t('cat_$v'), (v) => setState(() => _category = v)),
+          Row(
+            children: [
+              Expanded(
+                child: PickerField(
+                  label: s.t('from_date'),
+                  icon: Icons.event_outlined,
+                  value: _from == null ? null : ltr(_ymd(_from!)),
+                  onTap: () async {
+                    final picked = await _pickDate(_from);
+                    if (picked != null) setState(() => _from = picked);
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: PickerField(
+                  label: s.t('to_date'),
+                  icon: Icons.event_outlined,
+                  value: _to == null ? null : ltr(_ymd(_to!)),
+                  onTap: () async {
+                    final picked = await _pickDate(_to);
+                    if (picked != null) setState(() => _to = picked);
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => Navigator.pop(context, const _TicketFilters()),
+                  icon: const Icon(Icons.filter_alt_off_outlined),
+                  label: Text(s.t('clear_filters')),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: () {
+                    // A reversed range is almost always a slip; swap it rather than showing nothing
+                    var from = _from, to = _to;
+                    if (from != null && to != null && from.isAfter(to)) (from, to) = (to, from);
+                    Navigator.pop(context, _TicketFilters(status: _status, priority: _priority, category: _category, from: from, to: to));
+                  },
+                  icon: const Icon(Icons.check_rounded),
+                  label: Text(s.t('apply')),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class TicketDetailScreen extends StatefulWidget {
   const TicketDetailScreen({super.key, required this.id, required this.admin});
 
   final int id;
   final bool admin;
 
   @override
+  State<TicketDetailScreen> createState() => _TicketDetailScreenState();
+}
+
+class _TicketDetailScreenState extends State<TicketDetailScreen> {
+  /// Signed link that prints this ticket (IT desk only).
+  String? _printUrl;
+
+  @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
+    final admin = widget.admin;
     return Scaffold(
-      appBar: AppBar(title: Text(S.of(context).t(admin ? 'tickets' : 'my_tickets'))),
+      appBar: AppBar(
+        title: Text(s.t(admin ? 'tickets' : 'my_tickets')),
+        actions: [
+          if (_printUrl != null)
+            IconButton(
+              tooltip: s.t('print'),
+              onPressed: () => openExternal(context, _printUrl!),
+              icon: const Icon(Icons.print_outlined),
+            ),
+        ],
+      ),
       body: Loader(
         load: () async {
-          final body = await api.get(admin ? '/tickets/$id' : '/my/tickets/$id');
-          return Map<String, dynamic>.from(body['data'] as Map);
+          final body = await api.get(admin ? '/tickets/${widget.id}' : '/my/tickets/${widget.id}');
+          final ticket = Map<String, dynamic>.from(body['data'] as Map);
+          final printUrl = admin ? (ticket['print_url'] ?? body['print_url'])?.toString() : null;
+          if (mounted && printUrl != _printUrl) setState(() => _printUrl = printUrl);
+          return ticket;
         },
         builder: (context, ticket, reload) =>
             admin ? _AdminTicketBody(ticket: ticket, reload: reload) : _MyTicketBody(ticket: ticket, reload: reload),
@@ -159,7 +441,7 @@ class _TicketHeader extends StatelessWidget {
     final s = S.of(context);
     return DetailHeader(
       pills: [
-        Pill(ticket['ticket_no']?.toString() ?? ''),
+        Pill(ltr(ticket['ticket_no'])),
         Pill(s.t(ticket['status']?.toString() ?? ''), color: statusColor(ticket['status']?.toString())),
         Pill(s.t(ticket['priority']?.toString() ?? ''), color: priorityColor(ticket['priority']?.toString())),
       ],

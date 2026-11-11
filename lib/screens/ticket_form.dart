@@ -186,8 +186,8 @@ class _TicketFormScreenState extends State<TicketFormScreen> {
     final picker = ImagePicker();
     try {
       final picked = source == ImageSource.camera
-          ? [await picker.pickImage(source: source, maxWidth: 1600, maxHeight: 1600, imageQuality: 80)]
-          : await picker.pickMultiImage(maxWidth: 1600, maxHeight: 1600, imageQuality: 80, limit: _maxPhotos - _photos.length);
+          ? [await picker.pickImage(source: source, maxWidth: 1600, maxHeight: 1600, imageQuality: 75)]
+          : await picker.pickMultiImage(maxWidth: 1600, maxHeight: 1600, imageQuality: 75, limit: _maxPhotos - _photos.length);
       final paths = picked.whereType<XFile>().map((file) => file.path);
       if (mounted) setState(() => _photos.addAll(paths.take(_maxPhotos - _photos.length)));
     } catch (e) {

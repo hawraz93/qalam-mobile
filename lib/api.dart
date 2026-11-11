@@ -1,16 +1,20 @@
 import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
-
+import 'package:http/http.dart' as http;
+
 import 'crash.dart';
 import 'strings.dart';
 
 class ApiException implements Exception {
-  ApiException(this.status, this.message);
+  ApiException(this.status, this.message, [this.body]);
 
   final int status;
   final String message;
+
+  /// The decoded error answer, for refusals that carry more than a message
+  /// (a 409 on delete lists the linked records under `links`).
+  final Map<String, dynamic>? body;
 
   @override
   String toString() => message;
@@ -303,7 +307,7 @@ class Api {
       }
     }
 
-    throw ApiException(response.statusCode, message);
+    throw ApiException(response.statusCode, message, decoded is Map ? Map<String, dynamic>.from(decoded) : null);
   }
 }
 

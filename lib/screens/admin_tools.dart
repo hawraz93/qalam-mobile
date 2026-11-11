@@ -456,6 +456,24 @@ class UserDetailScreen extends StatelessWidget {
     }
   }
 
+  /// Records the user registered (posts, pages…) block the delete; the server
+  /// can move them to the signed-in admin first.
+  Future<void> _delete(BuildContext context, Map<String, dynamic> user) async {
+    final s = S.of(context);
+    final deleted = await deleteWithLinks(
+      context,
+      path: '/users/$id',
+      name: user['name']?.toString() ?? '',
+      confirmText: s.t('user_delete_confirm'),
+      deleteLabel: s.t('delete'),
+      linksHint: s.t('user_links_hint'),
+      forceLabel: s.t('user_move_and_delete'),
+      forceConfirm: s.t('user_move_confirm'),
+      forceBody: {'move_to_me': true},
+    );
+    if (deleted && context.mounted) Navigator.of(context).pop();
+  }
+
   Future<void> _changeRole(BuildContext context, Map<String, dynamic> user, VoidCallback reload) async {
     final s = S.of(context);
     final List<Map<String, dynamic>> roles;
@@ -592,6 +610,15 @@ class UserDetailScreen extends StatelessWidget {
                     icon: const Icon(Icons.manage_accounts_outlined),
                     label: Text(s.t('change_role')),
                   ),
+                  if (!isMe) ...[
+                    const SizedBox(height: 6),
+                    TextButton.icon(
+                      style: TextButton.styleFrom(foregroundColor: Tone.danger),
+                      onPressed: () => _delete(context, user),
+                      icon: const Icon(Icons.delete_outline_rounded),
+                      label: Text(s.t('user_delete')),
+                    ),
+                  ],
                 ],
               ),
               if (recent.isNotEmpty) ...[

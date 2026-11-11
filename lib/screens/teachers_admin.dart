@@ -86,22 +86,40 @@ class TeacherAdminDetailScreen extends StatelessWidget {
 
   final int id;
 
-  Future<void> _activate(BuildContext context, Map<String, dynamic> teacher, VoidCallback reload) async {
-    final s = S.of(context);
-    final returning = teacher['status'] == 'left';
+  /// What the server allows for this teacher now; older servers send no list,
+  /// so it falls back to the status.
+  List<String> _actionsOf(Map<String, dynamic> teacher) {
+    final list = teacher['actions'];
+    if (list is List) return list.map((a) => a.toString()).toList();
+    return switch (teacher['status']) {
+      'active' => ['mark_left'],
+      'left' => ['return'],
+      _ => ['activate'],
+    };
+  }
+
+  Future<bool> _ask(BuildContext context, String text, String action, {bool danger = false}) async {
     final yes = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        content: Text(s.t(returning ? 'teacher_return_confirm' : 'teacher_activate_confirm').replaceAll('{name}', teacher['name']?.toString() ?? '')),
+        content: Text(text),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(s.t('cancel'))),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(s.t(returning ? 'teacher_return' : 'activate'))),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(S.of(context).t('cancel'))),
+          FilledButton(
+            style: danger ? FilledButton.styleFrom(backgroundColor: Tone.danger) : null,
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(action),
+          ),
         ],
       ),
     );
-    if (yes != true || !context.mounted) return;
+    return yes == true;
+  }
+
+  Future<void> _call(BuildContext context, Future<dynamic> Function() request, VoidCallback reload) async {
+    final s = S.of(context);
     try {
-      await api.post('/admin/teachers/$id/activate');
+      await request();
       if (context.mounted) toast(context, s.t('saved'));
       reload();
     } catch (e) {
@@ -109,18 +127,126 @@ class TeacherAdminDetailScreen extends StatelessWidget {
     }
   }
 
-  Future<void> _markLeft(BuildContext context, Map<String, dynamic> teacher, VoidCallback reload) async {
-    final saved = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (_) => _LeftSheet(id: id, name: teacher['name']?.toString() ?? ''),
-    );
-    if (saved == true) {
-      if (context.mounted) toast(context, S.of(context).t('saved'));
-      reload();
+  Future<void> _run(BuildContext context, String action, Map<String, dynamic> teacher, VoidCallback reload) async {
+    final s = S.of(context);
+    final name = teacher['name']?.toString() ?? '';
+
+    switch (action) {
+      case 'activate' || 'return':
+        final returning = action == 'return';
+        final yes = await _ask(
+          context,
+          s.t(returning ? 'teacher_return_confirm' : 'teacher_activate_confirm').replaceAll('{name}', name),
+          s.t(returning ? 'teacher_return' : 'activate'),
+        );
+        if (!yes || !context.mounted) return;
+        return _call(context, () => api.post('/admin/teachers/$id/activate'), reload);
+
+      case 'mark_left':
+        final saved = await showModalBottomSheet<bool>(
+          context: context,
+          isScrollControlled: true,
+          useSafeArea: true,
+          showDragHandle: true,
+          builder: (_) => _LeftSheet(id: id, name: name),
+        );
+        if (saved == true) {
+          if (context.mounted) toast(context, s.t('saved'));
+          reload();
+        }
+
+      case 'deactivate':
+        final hasAccount = teacher['account'] != null;
+        var alsoAccount = false;
+        final yes = await showDialog<bool>(
+          context: context,
+          builder: (context) => StatefulBuilder(
+            builder: (context, setDialog) => AlertDialog(
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(s.t('teacher_deactivate_confirm').replaceAll('{name}', name)),
+                  if (hasAccount)
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      value: alsoAccount,
+                      onChanged: (v) => setDialog(() => alsoAccount = v ?? false),
+                      title: Text(s.t('left_deactivate_account')),
+                    ),
+                ],
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context, false), child: Text(s.t('cancel'))),
+                FilledButton(
+                  style: FilledButton.styleFrom(backgroundColor: Tone.warning),
+                  onPressed: () => Navigator.pop(context, true),
+                  child: Text(s.t('teacher_deactivate')),
+                ),
+              ],
+            ),
+          ),
+        );
+        if (yes != true || !context.mounted) return;
+        return _call(context, () => api.post('/admin/teachers/$id/deactivate', {'deactivate_account': alsoAccount}), reload);
+
+      case 'account_on':
+        return _call(context, () => api.put('/admin/teachers/$id/account', {'active': true}), reload);
+
+      case 'account_off':
+        final yes = await _ask(context, s.t('deactivate_confirm').replaceAll('{name}', name), s.t('account_off_action'), danger: true);
+        if (!yes || !context.mounted) return;
+        return _call(context, () => api.put('/admin/teachers/$id/account', {'active': false}), reload);
+
+      case 'delete':
+        final deleted = await deleteWithLinks(
+          context,
+          path: '/admin/teachers/$id',
+          name: name,
+          confirmText: s.t('teacher_delete_confirm'),
+          deleteLabel: s.t('delete'),
+          linksHint: s.t('teacher_links_hint'),
+          forceLabel: s.t('teacher_delete_with_records'),
+          forceConfirm: s.t('teacher_delete_with_records_confirm'),
+          forceBody: {'with_records': true},
+        );
+        if (deleted && context.mounted) Navigator.of(context).pop();
     }
+  }
+
+  /// One button per allowed action.
+  Widget _actionButton(BuildContext context, String action, Map<String, dynamic> teacher, VoidCallback reload) {
+    final s = S.of(context);
+    void run() => _run(context, action, teacher, reload);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: switch (action) {
+        'activate' => FilledButton.icon(onPressed: run, icon: const Icon(Icons.how_to_reg_outlined), label: Text(s.t('activate'))),
+        'return' => FilledButton.icon(onPressed: run, icon: const Icon(Icons.replay_rounded), label: Text(s.t('teacher_return'))),
+        'mark_left' => OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(foregroundColor: Tone.danger),
+            onPressed: run,
+            icon: const Icon(Icons.logout_rounded),
+            label: Text(s.t('teacher_mark_left')),
+          ),
+        'deactivate' => OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(foregroundColor: Tone.warning),
+            onPressed: run,
+            icon: const Icon(Icons.visibility_off_outlined),
+            label: Text(s.t('teacher_deactivate')),
+          ),
+        'account_on' => FilledButton.tonalIcon(onPressed: run, icon: const Icon(Icons.key_outlined), label: Text(s.t('account_on_action'))),
+        'account_off' => FilledButton.tonalIcon(onPressed: run, icon: const Icon(Icons.key_off_outlined), label: Text(s.t('account_off_action'))),
+        'delete' => TextButton.icon(
+            style: TextButton.styleFrom(foregroundColor: Tone.danger),
+            onPressed: run,
+            icon: const Icon(Icons.delete_outline_rounded),
+            label: Text(s.t('teacher_delete')),
+          ),
+        _ => const SizedBox.shrink(),
+      },
+    );
   }
 
   @override
@@ -137,6 +263,7 @@ class TeacherAdminDetailScreen extends StatelessWidget {
           final status = teacher['status']?.toString();
           final account = teacher['account'] as Map?;
           final history = (teacher['history'] as List? ?? []).map((h) => Map<String, dynamic>.from(h as Map)).toList();
+          final actions = _actionsOf(teacher);
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
@@ -186,19 +313,9 @@ class TeacherAdminDetailScreen extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 16),
-              if (status == 'active')
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(foregroundColor: Tone.danger),
-                  onPressed: () => _markLeft(context, teacher, reload),
-                  icon: const Icon(Icons.logout_rounded),
-                  label: Text(s.t('teacher_mark_left')),
-                )
-              else
-                FilledButton.icon(
-                  onPressed: () => _activate(context, teacher, reload),
-                  icon: Icon(status == 'left' ? Icons.replay_rounded : Icons.how_to_reg_outlined),
-                  label: Text(s.t(status == 'left' ? 'teacher_return' : 'activate')),
-                ),
+              // The main step first, delete last
+              for (final action in const ['activate', 'return', 'account_on', 'mark_left', 'deactivate', 'account_off', 'delete'])
+                if (actions.contains(action)) _actionButton(context, action, teacher, reload),
               const SizedBox(height: 8),
               TextButton.icon(
                 onPressed: () => Navigator.of(context).push(MaterialPageRoute(

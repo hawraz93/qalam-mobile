@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'api.dart';
 import 'strings.dart';
@@ -984,6 +985,7 @@ class PagedList extends StatefulWidget {
     this.query = const {},
     this.header,
     this.emptyIcon = Icons.inbox_outlined,
+    this.onLoaded,
   });
 
   final String path;
@@ -991,6 +993,10 @@ class PagedList extends StatefulWidget {
   final Widget? header;
   final IconData emptyIcon;
   final Widget Function(BuildContext context, Map<String, dynamic> item, VoidCallback refresh) itemBuilder;
+
+  /// Called with the whole answer of each first-page load, for extras the
+  /// endpoint sends next to `data` (tab counts, a print link).
+  final void Function(Map<String, dynamic> body)? onLoaded;
 
   @override
   State<PagedList> createState() => PagedListState();
@@ -1001,7 +1007,12 @@ class PagedListState extends State<PagedList> {
   int _page = 0;
   int _lastPage = 1;
   bool _loading = false;
+  bool _reloading = false;
   Object? _error;
+
+  /// Bumped by every refresh, so an answer for an older query (the user kept
+  /// typing or changed a filter meanwhile) is dropped instead of shown.
+  int _generation = 0;
 
   @override
   void initState() {
@@ -1018,22 +1029,27 @@ class PagedListState extends State<PagedList> {
   }
 
   Future<void> refresh() async {
+    _generation++;
     _page = 0;
     _lastPage = 1;
+    _loading = false;
     await _loadMore(reset: true);
   }
 
   Future<void> _loadMore({bool reset = false}) async {
     if (_loading) return;
+    final generation = _generation;
     setState(() {
       _loading = true;
+      _reloading = reset;
       _error = null;
     });
 
     try {
       final body = await api.get(widget.path, {...widget.query, 'page': '${_page + 1}'});
+      if (!mounted || generation != _generation) return;
       final rows = (body['data'] as List).map((row) => Map<String, dynamic>.from(row as Map)).toList();
-      if (!mounted) return;
+      if (reset && body is Map) widget.onLoaded?.call(Map<String, dynamic>.from(body));
       setState(() {
         if (reset) _items.clear();
         _items.addAll(rows);
@@ -1041,9 +1057,14 @@ class PagedListState extends State<PagedList> {
         _lastPage = (body['meta']?['last_page'] as int?) ?? _page;
       });
     } catch (e) {
-      if (mounted) setState(() => _error = e);
+      if (mounted && generation == _generation) setState(() => _error = e);
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && generation == _generation) {
+        setState(() {
+          _loading = false;
+          _reloading = false;
+        });
+      }
     }
   }
 
@@ -1061,7 +1082,7 @@ class PagedListState extends State<PagedList> {
     final hasMore = _page < _lastPage;
     final headerCount = widget.header == null ? 0 : 1;
 
-    return RefreshIndicator(
+    final list = RefreshIndicator(
       onRefresh: refresh,
       child: ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -1088,16 +1109,28 @@ class PagedListState extends State<PagedList> {
         },
       ),
     );
+
+    // The old rows stay visible while a new search / filter loads; a thin bar says so.
+    if (!_reloading || _items.isEmpty) return list;
+    return Stack(
+      children: [
+        list,
+        const Positioned(top: 0, left: 0, right: 0, child: LinearProgressIndicator(minHeight: 2.5)),
+      ],
+    );
   }
 }
 
 /// Segmented filter above a list, padded to match the cards.
 class FilterBar extends StatelessWidget {
-  const FilterBar({super.key, required this.segments, required this.selected, required this.onChanged});
+  const FilterBar({super.key, required this.segments, required this.selected, required this.onChanged, this.counts});
 
   final Map<String, String> segments;
   final String selected;
   final ValueChanged<String> onChanged;
+
+  /// Optional number badge per segment (totals the server sends with the list).
+  final Map<String, int>? counts;
 
   @override
   Widget build(BuildContext context) {
@@ -1120,13 +1153,36 @@ class FilterBar extends StatelessWidget {
                   onTap: () => onChanged(entry.key),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-                    child: Text(
-                      entry.value,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: entry.key == selected ? FontWeight.w700 : FontWeight.w500,
-                        color: entry.key == selected ? scheme.onPrimary : scheme.onSurface,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          entry.value,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: entry.key == selected ? FontWeight.w700 : FontWeight.w500,
+                            color: entry.key == selected ? scheme.onPrimary : scheme.onSurface,
+                          ),
+                        ),
+                        if (counts?[entry.key] != null) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            decoration: BoxDecoration(
+                              color: entry.key == selected ? scheme.onPrimary.withValues(alpha: 0.22) : scheme.primary.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              '${counts![entry.key]}',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
+                                color: entry.key == selected ? scheme.onPrimary : scheme.primary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                 ),
@@ -1344,4 +1400,147 @@ Future<T?> showFormSheet<T>(BuildContext context, {required String title, requir
       ),
     ),
   );
+}
+
+/// Opens a link (print page, linked record on the website) in the phone's browser.
+/// Relative paths are taken from the site the API lives on.
+Future<void> openExternal(BuildContext context, String url) async {
+  final uri = Uri.parse(Api.baseUrl).resolve(url);
+  final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+  if (!ok && context.mounted) toast(context, S.of(context).t('cannot_open'));
+}
+
+Future<bool> _confirm(BuildContext context, String text, String action) async {
+  final yes = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      content: Text(text),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: Text(S.of(context).t('cancel'))),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: Tone.danger),
+          onPressed: () => Navigator.pop(context, true),
+          child: Text(action),
+        ),
+      ],
+    ),
+  );
+  return yes == true;
+}
+
+/// Delete with a confirmation. When the server refuses with 409 because other
+/// records still point at [name], lists them ({table, label, count, url}) and
+/// offers one way through ([forceLabel]), which re-sends the delete with [forceBody]
+/// after a second confirmation. Returns true once deleted.
+Future<bool> deleteWithLinks(
+  BuildContext context, {
+  required String path,
+  required String name,
+  required String confirmText,
+  required String deleteLabel,
+  required String linksHint,
+  required String forceLabel,
+  required String forceConfirm,
+  required Map<String, dynamic> forceBody,
+}) async {
+  final s = S.of(context);
+  if (!await _confirm(context, confirmText.replaceAll('{name}', name), deleteLabel) || !context.mounted) return false;
+
+  List<Map<String, dynamic>> links;
+  try {
+    await api.delete(path);
+    if (context.mounted) toast(context, s.t('deleted'));
+    return true;
+  } on ApiException catch (e) {
+    final raw = e.body?['links'];
+    if (e.status != 409 || raw is! List || raw.isEmpty) {
+      if (context.mounted) toast(context, errorText(context, e));
+      return false;
+    }
+    links = raw.map((l) => Map<String, dynamic>.from(l as Map)).toList();
+  } catch (e) {
+    if (context.mounted) toast(context, errorText(context, e));
+    return false;
+  }
+  if (!context.mounted) return false;
+
+  final force = await showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    showDragHandle: true,
+    builder: (context) => LinkedRecordsSheet(
+      title: s.t('linked_records_title').replaceAll('{name}', name),
+      hint: linksHint,
+      links: links,
+      actionLabel: forceLabel,
+    ),
+  );
+  if (force != true || !context.mounted) return false;
+  if (!await _confirm(context, forceConfirm.replaceAll('{name}', name), forceLabel) || !context.mounted) return false;
+
+  try {
+    await api.delete(path, forceBody);
+    if (context.mounted) toast(context, s.t('deleted'));
+    return true;
+  } catch (e) {
+    if (context.mounted) toast(context, errorText(context, e));
+    return false;
+  }
+}
+
+/// "<count> <label>" per linked record, each with an "Open" button when the site has a page for it.
+class LinkedRecordsSheet extends StatelessWidget {
+  const LinkedRecordsSheet({super.key, required this.title, required this.hint, required this.links, required this.actionLabel});
+
+  final String title;
+  final String hint;
+  final List<Map<String, dynamic>> links;
+  final String actionLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(title, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 10),
+          for (final link in links)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(children: [
+                Icon(Icons.link_rounded, size: 18, color: scheme.onSurfaceVariant),
+                const SizedBox(width: 10),
+                // The count stays a number on its own, before the label, in every language
+                Text('\u2068${link['count'] ?? ''}\u2069', style: const TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(width: 6),
+                Expanded(child: Text(link['label']?.toString() ?? link['table']?.toString() ?? '')),
+                if (link['url'] != null && '${link['url']}'.isNotEmpty)
+                  TextButton.icon(
+                    onPressed: () => openExternal(context, link['url'].toString()),
+                    icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                    label: Text(s.t('open_link')),
+                  ),
+              ]),
+            ),
+          const SizedBox(height: 10),
+          Text(hint, style: TextStyle(fontSize: 12.5, height: 1.5, color: scheme.onSurfaceVariant)),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: Tone.danger),
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.delete_forever_outlined),
+            label: Text(actionLabel),
+          ),
+          const SizedBox(height: 4),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(s.t('cancel'))),
+        ],
+      ),
+    );
+  }
 }
