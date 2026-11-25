@@ -47,15 +47,23 @@ class PushHealth {
 
 /// What a push notification points at.
 class PushTarget {
-  PushTarget(this.category, this.entityId);
+  PushTarget(this.category, this.entityId, {this.webPath});
 
   final String category;
   final int? entityId;
 
+  /// A website page to open signed in, for notifications without a screen of their own (unit membership).
+  final String? webPath;
+
   static PushTarget? fromData(Map<String, dynamic> data) {
     final category = data['category']?.toString();
     if (category == null || category.isEmpty) return null;
-    return PushTarget(category, int.tryParse(data['entity_id']?.toString() ?? ''));
+    final webPath = data['web_path']?.toString();
+    return PushTarget(
+      category,
+      int.tryParse(data['entity_id']?.toString() ?? ''),
+      webPath: webPath == null || webPath.isEmpty ? null : webPath,
+    );
   }
 }
 

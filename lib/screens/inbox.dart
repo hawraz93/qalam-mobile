@@ -9,6 +9,7 @@ import 'complaints.dart';
 import 'contacts.dart';
 import 'management.dart';
 import 'tickets.dart';
+import 'web_page.dart';
 
 IconData categoryIcon(String? category) {
   switch (category) {
@@ -26,6 +27,8 @@ IconData categoryIcon(String? category) {
       return Icons.campaign;
     case 'accounts':
       return Icons.person_add_alt_1_outlined;
+    case 'units':
+      return Icons.apartment_outlined;
     default:
       return Icons.notifications_none;
   }
@@ -60,6 +63,12 @@ Future<bool> openTarget(BuildContext context, PushTarget target) async {
     case 'careers':
       if (api.can('careers')) screen = ApplicationDetailScreen(id: id);
       break;
+    case 'units':
+      // Moved, removed or answered: the account page. A join request: the unit's members on the website.
+      // The server only signs the web view in for pages this user may open.
+      final path = target.webPath;
+      if (path != null) screen = WebPageScreen(path: path, title: S.of(context).t('notif_units'));
+      break;
   }
 
   if (screen == null) return false;
@@ -87,7 +96,7 @@ class NotificationCard extends StatelessWidget {
 
     final opened = await openTarget(
       context,
-      PushTarget(item['category']?.toString() ?? '', item['entity_id'] as int?),
+      PushTarget(item['category']?.toString() ?? '', item['entity_id'] as int?, webPath: item['web_path'] as String?),
     );
 
     if (!opened && context.mounted) {
